@@ -12,6 +12,9 @@ defmodule SofiTrader.Application do
       SofiTrader.Repo,
       {DNSCluster, query: Application.get_env(:sofi_trader, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: SofiTrader.PubSub},
+      # Strategy system
+      {Registry, keys: :unique, name: SofiTrader.StrategyRegistry},
+      SofiTrader.Strategies.Supervisor,
       # Start a worker by calling: SofiTrader.Worker.start_link(arg)
       # {SofiTrader.Worker, arg},
       # Start to serve requests, typically the last entry
