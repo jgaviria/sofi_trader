@@ -116,9 +116,20 @@ defmodule SofiTraderWeb.DashboardLive do
     ~H"""
     <div class="min-h-screen bg-gray-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="mb-8">
-          <h1 class="text-3xl font-bold text-gray-900">SofiTrader Dashboard</h1>
-          <p class="mt-2 text-sm text-gray-600">Real-time market data powered by Tradier API</p>
+        <div class="mb-8 flex justify-between items-center">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">SofiTrader Dashboard</h1>
+            <p class="mt-2 text-sm text-gray-600">Real-time market data powered by Tradier API</p>
+          </div>
+          <.link
+            navigate={~p"/strategies"}
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Trading Strategies
+          </.link>
         </div>
 
         <%= if !@token_configured do %>
