@@ -30,6 +30,25 @@ defmodule SofiTrader.Strategies.Implementations.RsiMeanReversion do
   alias SofiTrader.Indicators
   require Logger
 
+  # Helper functions to parse config values (can be strings or numbers)
+  defp parse_int(value, default) when is_integer(value), do: value
+  defp parse_int(value, default) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, _} -> int
+      :error -> default
+    end
+  end
+  defp parse_int(_, default), do: default
+
+  defp parse_number(value, default) when is_number(value), do: value
+  defp parse_number(value, default) when is_binary(value) do
+    case Float.parse(value) do
+      {num, _} -> num
+      :error -> default
+    end
+  end
+  defp parse_number(_, default), do: default
+
   @doc """
   Analyzes current market data and determines if entry signal is present.
 
@@ -45,8 +64,8 @@ defmodule SofiTrader.Strategies.Implementations.RsiMeanReversion do
     - {:error, reason} if analysis fails
   """
   def check_entry_signal(price_history, config) do
-    rsi_period = Map.get(config, "rsi_period", 14)
-    oversold_threshold = Map.get(config, "oversold_threshold", 30)
+    rsi_period = parse_int(Map.get(config, "rsi_period", 14), 14)
+    oversold_threshold = parse_number(Map.get(config, "oversold_threshold", 30), 30)
 
     case Indicators.calculate_rsi(price_history, rsi_period) do
       {:ok, rsi} when rsi < oversold_threshold ->
@@ -84,8 +103,8 @@ defmodule SofiTrader.Strategies.Implementations.RsiMeanReversion do
     - {:error, reason} if analysis fails
   """
   def check_exit_signal(price_history, current_price, position, config) do
-    rsi_period = Map.get(config, "rsi_period", 14)
-    overbought_threshold = Map.get(config, "overbought_threshold", 70)
+    rsi_period = parse_int(Map.get(config, "rsi_period", 14), 14)
+    overbought_threshold = parse_number(Map.get(config, "overbought_threshold", 70), 70)
 
     # First check stop-loss and take-profit (highest priority)
     updated_position = %{position | current_price: current_price}
@@ -189,7 +208,7 @@ defmodule SofiTrader.Strategies.Implementations.RsiMeanReversion do
   Returns the minimum number of candles needed for this strategy.
   """
   def min_candles_required(config) do
-    rsi_period = Map.get(config, "rsi_period", 14)
+    rsi_period = parse_int(Map.get(config, "rsi_period", 14), 14)
     # Need at least period + 1 for RSI calculation
     rsi_period + 1
   end

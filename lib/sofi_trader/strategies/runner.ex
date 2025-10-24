@@ -139,13 +139,41 @@ defmodule SofiTrader.Strategies.Runner do
   end
 
   @impl true
-  def handle_info({:candle_closed, candle}, state) do
-    # New candle data received
-    Logger.debug("Strategy #{state.strategy_id}: New candle for #{candle["symbol"]}")
+  def handle_info({:candle_closed, candle, price_history}, state) do
+    # New candle data received from aggregator
+    Logger.info(
+      "Strategy #{state.strategy_id}: New candle for #{candle.symbol} " <>
+        "O=#{candle.open} H=#{candle.high} L=#{candle.low} C=#{candle.close}"
+    )
+
+    # Use the price history from the aggregator (it's more reliable)
+    state = %{state |
+      price_history: price_history,
+      last_candle_time: candle.end_time
+    }
+
+    # Reload strategy to get latest data (positions, stats, etc.)
+    strategy = Strategies.get_strategy!(state.strategy_id)
+    state = %{state | strategy: strategy}
+
+    # Evaluate strategy logic
+    case evaluate_strategy(state) do
+      {:ok, new_state} ->
+        {:noreply, new_state}
+
+      {:error, reason} ->
+        Logger.error("Strategy evaluation failed: #{inspect(reason)}")
+        {:noreply, state}
+    end
+  end
+
+  # Fallback for old message format (backward compatibility)
+  @impl true
+  def handle_info({:candle_closed, candle}, state) when is_map(candle) do
+    Logger.debug("Strategy #{state.strategy_id}: New candle for #{candle["symbol"]} (old format)")
 
     # Update price history
     new_history = update_price_history(state.price_history, candle["close"])
-
     state = %{state | price_history: new_history, last_candle_time: candle["time"]}
 
     # Reload strategy to get latest data (positions, stats, etc.)

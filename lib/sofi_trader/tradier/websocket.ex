@@ -8,7 +8,8 @@ defmodule SofiTrader.Tradier.WebSocket do
   use WebSockex
   require Logger
 
-  @stream_url "wss://ws.tradier.com/v1/markets/events"
+  # Use sandbox URL for paper trading
+  @stream_url "wss://sandbox-ws.tradier.com/v1/markets/events"
 
   defstruct [:session_id, :symbols, :filter, :handlers, :token]
 

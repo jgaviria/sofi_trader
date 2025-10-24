@@ -32,6 +32,18 @@ defmodule SofiTrader.Strategies.Supervisor do
   def start_strategy(strategy_id, opts \\ []) do
     paper_trading = Keyword.get(opts, :paper_trading, false)
 
+    # Start market data aggregator for this strategy's symbol and timeframe
+    strategy = Strategies.get_strategy!(strategy_id)
+    timeframe_minutes = parse_timeframe(strategy.config["timeframe"] || "5min")
+
+    case SofiTrader.MarketData.Supervisor.start_aggregator(strategy.symbol, timeframe_minutes) do
+      {:ok, _} ->
+        Logger.info("Market data aggregator ready for #{strategy.symbol} (#{timeframe_minutes}min)")
+
+      {:error, reason} ->
+        Logger.warning("Failed to start market data aggregator: #{inspect(reason)}")
+    end
+
     child_spec = %{
       id: {Runner, strategy_id},
       start: {Runner, :start_link, [[strategy_id: strategy_id, paper_trading: paper_trading]]},
@@ -57,7 +69,11 @@ defmodule SofiTrader.Strategies.Supervisor do
   Stops a running strategy.
   """
   def stop_strategy(strategy_id) do
-    case Registry.lookup(SofiTrader.StrategyRegistry, strategy_id) do
+    # Get strategy info before stopping
+    strategy = Strategies.get_strategy!(strategy_id)
+    timeframe_minutes = parse_timeframe(strategy.config["timeframe"] || "5min")
+
+    result = case Registry.lookup(SofiTrader.StrategyRegistry, strategy_id) do
       [{pid, _}] ->
         Logger.info("Stopping strategy runner for strategy #{strategy_id}")
         DynamicSupervisor.terminate_child(__MODULE__, pid)
@@ -65,6 +81,14 @@ defmodule SofiTrader.Strategies.Supervisor do
       [] ->
         {:error, :not_running}
     end
+
+    # Check if we should stop the market data aggregator
+    SofiTrader.MarketData.Supervisor.maybe_stop_unused_aggregator(
+      strategy.symbol,
+      timeframe_minutes
+    )
+
+    result
   end
 
   @doc """
@@ -108,6 +132,21 @@ defmodule SofiTrader.Strategies.Supervisor do
     case Registry.lookup(SofiTrader.StrategyRegistry, strategy_id) do
       [{_pid, _}] -> true
       [] -> false
+    end
+  end
+
+  # Private helpers
+
+  defp parse_timeframe(timeframe) do
+    case timeframe do
+      "1min" -> 1
+      "5min" -> 5
+      "15min" -> 15
+      "30min" -> 30
+      "1hour" -> 60
+      "4hour" -> 240
+      "1day" -> 1440
+      _ -> 5 # default
     end
   end
 end
