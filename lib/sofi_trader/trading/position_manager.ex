@@ -83,8 +83,10 @@ defmodule SofiTrader.Trading.PositionManager do
     }
 
     # Add price if limit order
-    if order_params.type == "limit" do
-      order_params = Map.put(order_params, :price, Keyword.fetch!(opts, :price))
+    order_params = if order_params.type == "limit" do
+      Map.put(order_params, :price, Keyword.fetch!(opts, :price))
+    else
+      order_params
     end
 
     # Place order

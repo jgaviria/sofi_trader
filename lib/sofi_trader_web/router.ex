@@ -17,7 +17,8 @@ defmodule SofiTraderWeb.Router do
   scope "/", SofiTraderWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", DashboardLive
+    get "/welcome", PageController, :home
   end
 
   # Other scopes may use custom stacks.

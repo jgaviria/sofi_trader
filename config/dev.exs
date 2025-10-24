@@ -2,8 +2,8 @@ import Config
 
 # Configure your database
 config :sofi_trader, SofiTrader.Repo,
-  username: "postgres",
-  password: "postgres",
+  username: "juan",
+  password: "",
   hostname: "localhost",
   database: "sofi_trader_dev",
   stacktrace: true,
