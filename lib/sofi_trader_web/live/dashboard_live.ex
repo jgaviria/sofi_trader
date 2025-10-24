@@ -14,6 +14,10 @@ defmodule SofiTraderWeb.DashboardLive do
       |> assign(:loading, true)
       |> assign(:error, nil)
       |> assign(:token_configured, token_configured?())
+      |> assign(:show_trade_modal, false)
+      |> assign(:trade_symbol, nil)
+      |> assign(:trade_side, nil)
+      |> assign(:success_message, nil)
 
     # Only fetch quotes if token is configured
     if socket.assigns.token_configured do
@@ -44,6 +48,32 @@ defmodule SofiTraderWeb.DashboardLive do
   end
 
   @impl true
+  def handle_info({:order_placed, symbol, order_id, side}, socket) do
+    action = if side == :buy, do: "Buy", else: "Sell"
+    message = "#{action} order placed successfully for #{symbol}. Order ID: #{order_id}"
+
+    socket =
+      socket
+      |> assign(:show_trade_modal, false)
+      |> assign(:success_message, message)
+
+    # Clear success message after 5 seconds
+    Process.send_after(self(), :clear_success, 5_000)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(:clear_success, socket) do
+    {:noreply, assign(socket, :success_message, nil)}
+  end
+
+  @impl true
+  def handle_info({:close_modal}, socket) do
+    {:noreply, assign(socket, show_trade_modal: false)}
+  end
+
+  @impl true
   def handle_event("add_symbol", %{"symbol" => symbol}, socket) do
     symbol = String.upcase(String.trim(symbol))
 
@@ -68,6 +98,17 @@ defmodule SofiTraderWeb.DashboardLive do
   def handle_event("refresh", _params, socket) do
     send(self(), :fetch_quotes)
     {:noreply, assign(socket, :loading, true)}
+  end
+
+  @impl true
+  def handle_event("open_trade", %{"symbol" => symbol, "side" => side}, socket) do
+    trade_side = String.to_atom(side)
+    {:noreply, assign(socket, show_trade_modal: true, trade_symbol: symbol, trade_side: trade_side)}
+  end
+
+  @impl true
+  def handle_event("close_trade_modal", _params, socket) do
+    {:noreply, assign(socket, show_trade_modal: false)}
   end
 
   @impl true
@@ -96,6 +137,24 @@ defmodule SofiTraderWeb.DashboardLive do
                     export TRADIER_ACCESS_TOKEN="your_token_here"
                   </code>
                   <p class="mt-2">Then restart the server.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <%= if @success_message do %>
+          <div class="rounded-md bg-green-50 p-4 mb-6">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-green-800">Success!</h3>
+                <div class="mt-2 text-sm text-green-700">
+                  <p><%= @success_message %></p>
                 </div>
               </div>
             </div>
@@ -194,6 +253,26 @@ defmodule SofiTraderWeb.DashboardLive do
                         </div>
                       </div>
                     </div>
+
+                    <!-- Trading Buttons -->
+                    <div class="flex gap-2 mt-4 pt-4 border-t border-gray-200">
+                      <button
+                        phx-click="open_trade"
+                        phx-value-symbol={symbol}
+                        phx-value-side="buy"
+                        class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-emerald-500 hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-400"
+                      >
+                        Buy
+                      </button>
+                      <button
+                        phx-click="open_trade"
+                        phx-value-symbol={symbol}
+                        phx-value-side="sell"
+                        class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-rose-500 hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-400"
+                      >
+                        Sell
+                      </button>
+                    </div>
                   </div>
                 <% else %>
                   <div class="text-center py-4 text-gray-500">
@@ -210,6 +289,17 @@ defmodule SofiTraderWeb.DashboardLive do
           <p class="mt-1">Using Tradier <%= if System.get_env("TRADIER_SANDBOX") == "true", do: "Sandbox", else: "Production" %> API</p>
         </div>
       </div>
+
+      <!-- Trade Modal -->
+      <%= if @show_trade_modal && @trade_symbol && @trade_side do %>
+        <.live_component
+          module={SofiTraderWeb.Components.TradeModal}
+          id="trade-modal"
+          symbol={@trade_symbol}
+          side={@trade_side}
+          current_price={get_current_price(@quotes, @trade_symbol)}
+        />
+      <% end %>
     </div>
     """
   end
@@ -268,4 +358,11 @@ defmodule SofiTraderWeb.DashboardLive do
   defp format_error(%{body: body}) when is_map(body), do: inspect(body)
   defp format_error(%{status: status}), do: "HTTP #{status}"
   defp format_error(error), do: inspect(error)
+
+  defp get_current_price(quotes, symbol) do
+    case Map.get(quotes, symbol) do
+      nil -> 0.0
+      quote -> quote["last"] || quote["close"] || 0.0
+    end
+  end
 end
