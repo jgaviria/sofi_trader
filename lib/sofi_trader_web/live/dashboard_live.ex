@@ -1,7 +1,7 @@
 defmodule SofiTraderWeb.DashboardLive do
   use SofiTraderWeb, :live_view
 
-  alias SofiTrader.Tradier.MarketData
+  alias SofiTrader.MarketData.QuoteCache
 
   @default_symbols ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"]
 
@@ -19,32 +19,39 @@ defmodule SofiTraderWeb.DashboardLive do
       |> assign(:trade_side, nil)
       |> assign(:success_message, nil)
 
-    # Only fetch quotes if token is configured
-    if socket.assigns.token_configured do
-      send(self(), :fetch_quotes)
-    end
+    # Subscribe to PubSub for real-time quote updates
+    if connected?(socket) && socket.assigns.token_configured do
+      # Subscribe to each symbol
+      Enum.each(@default_symbols, fn symbol ->
+        Phoenix.PubSub.subscribe(SofiTrader.PubSub, "quotes:#{symbol}")
+        # Subscribe to QuoteCache and get initial quote
+        case QuoteCache.subscribe(symbol) do
+          {:ok, quote} when not is_nil(quote) ->
+            send(self(), {:quote_update, symbol, quote})
+          _ ->
+            :ok
+        end
+      end)
 
-    {:ok, socket}
+      socket = assign(socket, :loading, false)
+      {:ok, socket}
+    else
+      {:ok, socket}
+    end
   end
 
   @impl true
-  def handle_info(:fetch_quotes, socket) do
-    case fetch_market_quotes(socket.assigns.symbols) do
-      {:ok, quotes} ->
-        socket =
-          socket
-          |> assign(:quotes, quotes)
-          |> assign(:loading, false)
-          |> assign(:error, nil)
+  def handle_info({:quote_update, symbol, quote_data}, socket) do
+    # Real-time quote update from PubSub
+    quotes = Map.put(socket.assigns.quotes, symbol, quote_data)
 
-        # Schedule next update in 5 seconds
-        Process.send_after(self(), :fetch_quotes, 5_000)
+    socket =
+      socket
+      |> assign(:quotes, quotes)
+      |> assign(:loading, false)
+      |> assign(:error, nil)
 
-        {:noreply, socket}
-
-      {:error, error} ->
-        {:noreply, assign(socket, error: format_error(error), loading: false)}
-    end
+    {:noreply, socket}
   end
 
   @impl true
@@ -79,7 +86,20 @@ defmodule SofiTraderWeb.DashboardLive do
 
     if symbol != "" and symbol not in socket.assigns.symbols do
       new_symbols = [symbol | socket.assigns.symbols]
-      send(self(), :fetch_quotes)
+
+      # Subscribe to PubSub for this new symbol
+      if connected?(socket) do
+        Phoenix.PubSub.subscribe(SofiTrader.PubSub, "quotes:#{symbol}")
+
+        # Subscribe to QuoteCache
+        case QuoteCache.subscribe(symbol) do
+          {:ok, quote} when not is_nil(quote) ->
+            send(self(), {:quote_update, symbol, quote})
+          _ ->
+            :ok
+        end
+      end
+
       {:noreply, assign(socket, :symbols, new_symbols)}
     else
       {:noreply, socket}
@@ -91,12 +111,19 @@ defmodule SofiTraderWeb.DashboardLive do
     new_symbols = List.delete(socket.assigns.symbols, symbol)
     quotes = Map.delete(socket.assigns.quotes, symbol)
 
+    # Unsubscribe from PubSub and QuoteCache
+    if connected?(socket) do
+      Phoenix.PubSub.unsubscribe(SofiTrader.PubSub, "quotes:#{symbol}")
+      QuoteCache.unsubscribe(symbol)
+    end
+
     {:noreply, assign(socket, symbols: new_symbols, quotes: quotes)}
   end
 
   @impl true
   def handle_event("refresh", _params, socket) do
-    send(self(), :fetch_quotes)
+    # Force immediate refresh from QuoteCache
+    QuoteCache.refresh_symbols(socket.assigns.symbols)
     {:noreply, assign(socket, :loading, true)}
   end
 
@@ -285,8 +312,14 @@ defmodule SofiTraderWeb.DashboardLive do
         <% end %>
 
         <div class="mt-8 text-center text-sm text-gray-500">
-          <p>Data updates every 5 seconds</p>
-          <p class="mt-1">Using Tradier <%= if System.get_env("TRADIER_SANDBOX") == "true", do: "Sandbox", else: "Production" %> API</p>
+          <p class="flex items-center justify-center gap-2">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+            Real-time data via PubSub
+          </p>
+          <p class="mt-1">Using Tradier <%= if System.get_env("TRADIER_SANDBOX") != "false", do: "Sandbox", else: "Production" %> API</p>
         </div>
       </div>
 
@@ -302,23 +335,6 @@ defmodule SofiTraderWeb.DashboardLive do
       <% end %>
     </div>
     """
-  end
-
-  defp fetch_market_quotes(symbols) do
-    case MarketData.get_quotes(symbols) do
-      {:ok, %{"quotes" => %{"quote" => quotes}}} when is_list(quotes) ->
-        quote_map = Map.new(quotes, fn q -> {q["symbol"], q} end)
-        {:ok, quote_map}
-
-      {:ok, %{"quotes" => %{"quote" => quote}}} when is_map(quote) ->
-        {:ok, %{quote["symbol"] => quote}}
-
-      {:ok, response} ->
-        {:error, "Unexpected response format: #{inspect(response)}"}
-
-      {:error, error} ->
-        {:error, error}
-    end
   end
 
   defp token_configured? do

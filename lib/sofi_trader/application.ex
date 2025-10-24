@@ -24,7 +24,9 @@ defmodule SofiTrader.Application do
       {Registry, keys: :unique, name: SofiTrader.StrategyRegistry},
       SofiTrader.Strategies.Supervisor,
       # Market data system
-      {Registry, keys: :unique, name: SofiTrader.MarketDataRegistry}
+      {Registry, keys: :unique, name: SofiTrader.MarketDataRegistry},
+      SofiTrader.MarketData.PriceStore,
+      SofiTrader.MarketData.QuoteCache
     ] ++ websocket_manager ++ [
       SofiTrader.MarketData.Supervisor,
       # Start a worker by calling: SofiTrader.Worker.start_link(arg)

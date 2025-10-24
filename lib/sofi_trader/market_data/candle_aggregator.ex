@@ -9,6 +9,7 @@ defmodule SofiTrader.MarketData.CandleAggregator do
   require Logger
 
   alias SofiTrader.MarketData.WebSocketManager
+  alias SofiTrader.MarketData.PriceStore
 
   defstruct [
     :symbol,
@@ -171,8 +172,12 @@ defmodule SofiTrader.MarketData.CandleAggregator do
   end
 
   defp update_price_history(state, price) do
-    # Keep last 200 prices for technical indicators
+    # Keep last 200 prices for technical indicators in local state
     price_history = [price | state.price_history] |> Enum.take(200)
+
+    # Also store in shared ETS for fast concurrent access
+    PriceStore.add_price(state.symbol, price)
+
     %{state | price_history: price_history}
   end
 
@@ -245,6 +250,13 @@ defmodule SofiTrader.MarketData.CandleAggregator do
   defp publish_candle(symbol, candle, price_history) do
     Logger.info("Publishing candle for #{symbol}: O=#{candle.open} H=#{candle.high} L=#{candle.low} C=#{candle.close}")
 
+    # Store candle in shared ETS for fast concurrent access
+    PriceStore.put_candle(symbol, candle.timeframe, candle)
+
+    # Store price history snapshot in ETS
+    PriceStore.put_price_history(symbol, price_history)
+
+    # Broadcast via PubSub for real-time subscribers
     message = {:candle_closed, candle, price_history}
     Phoenix.PubSub.broadcast(
       SofiTrader.PubSub,
