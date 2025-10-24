@@ -103,7 +103,7 @@ defmodule SofiTraderWeb.Components.TradeModal do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50" phx-click="close" phx-target={@myself}>
+    <div class="fixed inset-0 flex items-center justify-center p-4 z-50" style="background-color: rgba(0, 0, 0, 0.3); backdrop-filter: blur(2px);" phx-click="close" phx-target={@myself}>
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6" phx-click="stop_propagation" phx-target={@myself}>
         <!-- Header -->
         <div class="flex justify-between items-start mb-6">
