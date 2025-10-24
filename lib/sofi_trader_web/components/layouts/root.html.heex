@@ -31,7 +31,86 @@
       })();
     </script>
   </head>
-  <body>
+  <body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          <div class="flex">
+            <!-- Logo/Brand -->
+            <div class="flex-shrink-0 flex items-center">
+              <a href="/" class="flex items-center gap-2 text-xl font-bold text-gray-900">
+                <svg class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                SofiTrader
+              </a>
+            </div>
+
+            <!-- Navigation Links -->
+            <div class="hidden sm:ml-6 sm:flex sm:space-x-4">
+              <a
+                href="/"
+                class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors border-b-2 border-transparent hover:border-blue-500 hover:text-blue-600"
+                data-nav-item="dashboard"
+              >
+                <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                Dashboard
+              </a>
+
+              <a
+                href="/strategies"
+                class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors border-b-2 border-transparent hover:border-blue-500 hover:text-blue-600"
+                data-nav-item="strategies"
+              >
+                <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Strategies
+              </a>
+            </div>
+          </div>
+
+          <!-- Right side items -->
+          <div class="flex items-center gap-4">
+            <!-- Environment Badge -->
+            <div class="hidden sm:block">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                <%= if System.get_env("TRADIER_SANDBOX") != "false", do: "Sandbox", else: "Production" %>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <script>
+      // Highlight active navigation item based on current path
+      document.addEventListener('DOMContentLoaded', () => {
+        const path = window.location.pathname;
+        const navItems = document.querySelectorAll('[data-nav-item]');
+
+        navItems.forEach(item => {
+          const navType = item.getAttribute('data-nav-item');
+          let isActive = false;
+
+          if (navType === 'dashboard' && path === '/') {
+            isActive = true;
+          } else if (navType === 'strategies' && path.startsWith('/strategies')) {
+            isActive = true;
+          }
+
+          if (isActive) {
+            item.classList.remove('text-gray-600', 'border-transparent');
+            item.classList.add('text-blue-600', 'border-blue-500');
+          } else {
+            item.classList.add('text-gray-600');
+          }
+        });
+      });
+    </script>
+
     {@inner_content}
   </body>
 </html>

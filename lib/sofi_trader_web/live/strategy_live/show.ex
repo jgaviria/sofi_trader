@@ -83,6 +83,28 @@ defmodule SofiTraderWeb.StrategyLive.Show do
           </div>
         </div>
 
+        <!-- Strategy Information Notice -->
+        <%= if @strategy.type == "rsi_mean_reversion" do %>
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div class="flex items-start">
+              <svg class="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+              <div class="text-sm text-blue-800">
+                <p class="font-semibold mb-1">RSI Mean Reversion Strategy (Long-Only)</p>
+                <div class="space-y-1">
+                  <p><strong>How it works:</strong> This strategy enters when the market is oversold and exits when overbought.</p>
+                  <p><strong>Entry:</strong> Buys when RSI &lt; <%= get_in(@strategy.config, ["oversold_threshold"]) || 30 %> (oversold)</p>
+                  <p><strong>Exit:</strong> Sells when RSI &gt; <%= get_in(@strategy.config, ["overbought_threshold"]) || 70 %> (overbought)</p>
+                  <p class="text-xs mt-2 text-blue-700">
+                    <strong>Note:</strong> Standard thresholds are 30/70. Lower thresholds (e.g., 20/80) trigger fewer trades but may catch stronger reversals.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
         <!-- Runtime Status -->
         <div class="bg-white rounded-lg shadow mb-6">
           <div class="px-6 py-4 border-b border-gray-200">
@@ -413,11 +435,6 @@ defmodule SofiTraderWeb.StrategyLive.Show do
                     <div class="font-semibold text-yellow-900">Dashboard Not Available</div>
                     <div class="text-sm text-yellow-700 mt-1">
                       <%= @dashboard_data.risk_message %>
-                    </div>
-                    <div class="text-xs text-yellow-600 mt-2">
-                      Debug: has_data=<%= @dashboard_data.has_data %>,
-                      signal_type=<%= @dashboard_data.signal_type %>,
-                      rsi=<%= inspect(@dashboard_data.rsi) %>
                     </div>
                   </div>
                 </div>
@@ -780,7 +797,7 @@ defmodule SofiTraderWeb.StrategyLive.Show do
           has_data: true
         }
       rescue
-        e ->
+        _e ->
           %{
             rsi: nil,
             signal_strength: 0.0,
@@ -797,7 +814,7 @@ defmodule SofiTraderWeb.StrategyLive.Show do
               risk_checks: false
             },
             can_trade: false,
-            risk_message: "Error: #{inspect(e)}",
+            risk_message: "Waiting for market data - strategy will resume when new data arrives",
             has_data: false
           }
       end

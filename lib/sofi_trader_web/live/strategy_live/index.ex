@@ -253,6 +253,24 @@ defmodule SofiTraderWeb.StrategyLive.Index do
                       </option>
                     </select>
                   </div>
+
+                  <!-- Strategy Info Notice -->
+                  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div class="flex items-start">
+                      <svg class="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                      </svg>
+                      <div class="text-sm text-blue-800">
+                        <p class="font-semibold mb-1">About RSI Mean Reversion Strategy</p>
+                        <p class="mb-2">This is a <strong>long-only</strong> strategy that buys when RSI indicates oversold conditions and sells when overbought:</p>
+                        <ul class="list-disc ml-4 space-y-1">
+                          <li><strong>Entry:</strong> Opens a buy position when RSI falls below the oversold threshold</li>
+                          <li><strong>Exit:</strong> Closes the position when RSI rises above the overbought threshold</li>
+                          <li><strong>Default thresholds (30/70):</strong> Standard mean reversion levels used by most traders</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Strategy Configuration -->
@@ -269,6 +287,7 @@ defmodule SofiTraderWeb.StrategyLive.Index do
                         min="1"
                         class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
+                      <p class="mt-1 text-xs text-gray-500">Number of candles for RSI calculation (14 is standard)</p>
                     </div>
 
                     <div>
@@ -296,6 +315,7 @@ defmodule SofiTraderWeb.StrategyLive.Index do
                         max="100"
                         class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
+                      <p class="mt-1 text-xs text-gray-500">Buy when RSI drops below this (30 is standard)</p>
                     </div>
 
                     <div>
@@ -308,6 +328,7 @@ defmodule SofiTraderWeb.StrategyLive.Index do
                         max="100"
                         class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       />
+                      <p class="mt-1 text-xs text-gray-500">Sell when RSI rises above this (70 is standard)</p>
                     </div>
                   </div>
                 </div>
