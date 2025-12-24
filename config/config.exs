@@ -67,6 +67,14 @@ config :sofi_trader, :tradier,
   stream_url: "https://stream.tradier.com/v1",
   sandbox: true
 
+# Kalshi API configuration
+config :sofi_trader, :kalshi,
+  base_url: "https://api.elections.kalshi.com",
+  demo_url: "https://demo-api.kalshi.co",
+  websocket_url: "wss://api.elections.kalshi.com/trade-api/ws/v2",
+  demo_websocket_url: "wss://demo-api.kalshi.co/trade-api/ws/v2",
+  demo: true
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

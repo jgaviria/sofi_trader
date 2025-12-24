@@ -20,11 +20,18 @@ defmodule SofiTraderWeb.Router do
     live "/", DashboardLive
     get "/welcome", PageController, :home
 
-    # Strategy routes
+    # Tradier Strategy routes
     live "/strategies", StrategyLive.Index, :index
     live "/strategies/new", StrategyLive.Index, :new
     live "/strategies/:id/edit", StrategyLive.Index, :edit
     live "/strategies/:id", StrategyLive.Show, :show
+
+    # Kalshi Prediction Markets routes
+    live "/kalshi", KalshiLive.Index, :index
+    live "/kalshi/new", KalshiLive.Index, :new
+    live "/kalshi/:id/edit", KalshiLive.Index, :edit
+    live "/kalshi/:id/orders", KalshiLive.Orders, :index
+    live "/kalshi/markets", KalshiLive.Markets, :index
   end
 
   # Other scopes may use custom stacks.

@@ -38,4 +38,5 @@ npm-debug.log
 # Environment variables (contains secrets)
 .env
 .env.*
+start.sh
 

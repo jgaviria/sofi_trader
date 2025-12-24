@@ -9,10 +9,17 @@ defmodule SofiTrader.Application do
   def start(_type, _args) do
     # Conditionally start WebSocketManager based on sandbox mode
     # WebSocket streaming is not available in Tradier sandbox (paper trading)
-    websocket_manager = if sandbox_mode?() do
+    tradier_websocket = if tradier_sandbox_mode?() do
       []
     else
       [SofiTrader.MarketData.WebSocketManager]
+    end
+
+    # Conditionally start Kalshi WebSocketManager if API is configured
+    kalshi_websocket = if kalshi_configured?() do
+      [SofiTrader.Kalshi.WebSocketManager]
+    else
+      []
     end
 
     children = [
@@ -20,17 +27,19 @@ defmodule SofiTrader.Application do
       SofiTrader.Repo,
       {DNSCluster, query: Application.get_env(:sofi_trader, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: SofiTrader.PubSub},
-      # Strategy system
+      # Tradier strategy system
       {Registry, keys: :unique, name: SofiTrader.StrategyRegistry},
       SofiTrader.Strategies.Supervisor,
-      # Market data system
+      # Tradier market data system
       {Registry, keys: :unique, name: SofiTrader.MarketDataRegistry},
       SofiTrader.MarketData.PriceStore,
       SofiTrader.MarketData.QuoteCache
-    ] ++ websocket_manager ++ [
+    ] ++ tradier_websocket ++ [
       SofiTrader.MarketData.Supervisor,
-      # Start a worker by calling: SofiTrader.Worker.start_link(arg)
-      # {SofiTrader.Worker, arg},
+      # Kalshi prediction markets system
+      {Registry, keys: :unique, name: SofiTrader.KalshiStrategyRegistry},
+      SofiTrader.Kalshi.StrategySupervisor
+    ] ++ kalshi_websocket ++ [
       # Start to serve requests, typically the last entry
       SofiTraderWeb.Endpoint
     ]
@@ -45,6 +54,7 @@ defmodule SofiTrader.Application do
         # Wait a moment for all systems to be ready
         Process.sleep(1000)
         SofiTrader.Strategies.Supervisor.start_all_active_strategies(paper_trading: true)
+        SofiTrader.Kalshi.StrategySupervisor.start_all_active(paper_trading: true)
       end)
 
       {:ok, supervisor_pid}
@@ -59,8 +69,16 @@ defmodule SofiTrader.Application do
     :ok
   end
 
-  defp sandbox_mode? do
+  defp tradier_sandbox_mode? do
     config = Application.get_env(:sofi_trader, :tradier, [])
     Keyword.get(config, :sandbox, true)
+  end
+
+  defp kalshi_configured? do
+    api_key = System.get_env("KALSHI_API_KEY")
+    private_key = System.get_env("KALSHI_PRIVATE_KEY")
+
+    is_binary(api_key) and byte_size(api_key) > 0 and
+    is_binary(private_key) and byte_size(private_key) > 0
   end
 end
