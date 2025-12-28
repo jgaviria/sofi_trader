@@ -25,7 +25,8 @@ defmodule SofiTrader.Kalshi.Alert do
     "position_opened",     # New position opened
     "position_closed",     # Position closed
     "settlement",          # Market settled
-    "error"                # Strategy error
+    "error",               # Strategy error
+    "ai_opportunity"       # AI found underpriced market
   ]
 
   @severities ["info", "warning", "critical"]
@@ -169,6 +170,38 @@ defmodule SofiTrader.Kalshi.Alert do
       severity: "critical",
       message: "Strategy error: #{error_message}",
       data: error_data
+    }
+  end
+
+  @doc """
+  Build an alert struct for AI-identified opportunities.
+  """
+  def ai_opportunity(ticker, analysis) do
+    recommendation = analysis.recommendation |> to_string() |> String.upcase()
+    edge = analysis.edge
+    confidence = round(analysis.confidence * 100)
+
+    severity = cond do
+      edge >= 10 && confidence >= 80 -> "critical"
+      edge >= 7 && confidence >= 70 -> "warning"
+      true -> "info"
+    end
+
+    %{
+      strategy_id: nil,
+      market_ticker: ticker,
+      alert_type: "ai_opportunity",
+      severity: severity,
+      message: "AI: #{recommendation} has #{edge}¢ edge (#{confidence}% confidence)",
+      data: %{
+        "recommendation" => recommendation,
+        "edge" => edge,
+        "confidence" => analysis.confidence,
+        "fair_value_yes" => analysis.fair_value_yes,
+        "current_yes_price" => analysis.current_yes_price,
+        "reasoning" => analysis.reasoning,
+        "key_factors" => analysis.key_factors
+      }
     }
   end
 end

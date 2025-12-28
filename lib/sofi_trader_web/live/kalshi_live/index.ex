@@ -322,6 +322,15 @@ defmodule SofiTraderWeb.KalshiLive.Index do
           </div>
           <div class="flex gap-3">
             <.link
+              navigate={~p"/kalshi/sports-scanner"}
+              class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <svg class="h-4 w-4 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              AI Scanner
+            </.link>
+            <.link
               navigate={~p"/kalshi/markets"}
               class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
             >
@@ -368,171 +377,231 @@ defmodule SofiTraderWeb.KalshiLive.Index do
           <.strategy_form form_strategy={@form_strategy} page_title={@page_title} />
         <% end %>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <!-- Strategies List (2 columns) -->
-          <div class="lg:col-span-2">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Your Strategies</h2>
-
-            <%= if Enum.empty?(@strategies) do %>
-              <div class="bg-white rounded-lg shadow p-8 text-center">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <h3 class="mt-2 text-sm font-medium text-gray-900">No strategies yet</h3>
-                <p class="mt-1 text-sm text-gray-500">Create a strategy to start monitoring Kalshi markets.</p>
-                <div class="mt-4">
-                  <.link navigate={~p"/kalshi/new"} class="text-indigo-600 hover:text-indigo-500 font-medium">
-                    Create your first strategy →
-                  </.link>
-                </div>
-              </div>
-            <% else %>
-              <div class="space-y-4">
-                <%= for strategy <- @strategies do %>
-                  <.strategy_card strategy={strategy} />
-                <% end %>
-              </div>
-            <% end %>
+        <!-- Strategies Grid -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">Your Strategies</h2>
+            <span class="text-sm text-gray-500"><%= length(@strategies) %> total</span>
           </div>
 
-          <!-- Alerts Panel (1 column) -->
-          <div>
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Alerts</h2>
-            <div class="bg-white rounded-lg shadow overflow-hidden">
-              <%= if Enum.empty?(@alerts) do %>
-                <div class="p-6 text-center text-gray-500 text-sm">
-                  No alerts yet. Alerts will appear here when your strategies trigger.
+          <%= if Enum.empty?(@strategies) do %>
+            <div class="bg-white rounded-lg shadow p-8 text-center">
+              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <h3 class="mt-2 text-sm font-medium text-gray-900">No strategies yet</h3>
+              <p class="mt-1 text-sm text-gray-500">Create a strategy to start monitoring Kalshi markets.</p>
+              <div class="mt-4">
+                <.link navigate={~p"/kalshi/new"} class="text-indigo-600 hover:text-indigo-500 font-medium">
+                  Create your first strategy →
+                </.link>
+              </div>
+            </div>
+          <% else %>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <%= for strategy <- @strategies do %>
+                <.strategy_card strategy={strategy} live_prices={@live_prices} />
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+
+        <!-- Recent Alerts (collapsible panel) -->
+        <%= unless Enum.empty?(@alerts) do %>
+          <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <svg class="h-4 w-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                Recent Alerts
+              </h3>
+              <span class="text-xs text-gray-500"><%= length(@alerts) %> alerts</span>
+            </div>
+            <div class="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+              <%= for alert <- Enum.take(@alerts, 5) do %>
+                <div class={"px-4 py-2 flex items-center justify-between hover:bg-gray-50 #{if !alert.acknowledged, do: "bg-blue-50/50"}"}>
+                  <div class="flex items-center gap-3 min-w-0 flex-1">
+                    <span class={["w-2 h-2 rounded-full flex-shrink-0", severity_dot_class(alert.severity)]}></span>
+                    <p class="text-sm text-gray-700 truncate"><%= alert.message %></p>
+                  </div>
+                  <div class="flex items-center gap-2 ml-3">
+                    <span class="text-xs text-gray-400"><%= format_time(alert.inserted_at) %></span>
+                    <%= unless alert.acknowledged do %>
+                      <button
+                        phx-click="acknowledge_alert"
+                        phx-value-id={alert.id}
+                        class="text-gray-400 hover:text-green-600"
+                        title="Acknowledge"
+                      >
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </button>
+                    <% end %>
+                  </div>
                 </div>
-              <% else %>
-                <ul class="divide-y divide-gray-200 max-h-96 overflow-y-auto">
-                  <%= for alert <- @alerts do %>
-                    <li class={"p-4 hover:bg-gray-50 #{if !alert.acknowledged, do: "bg-blue-50"}"}>
-                      <div class="flex justify-between items-start">
-                        <div class="flex-1 min-w-0">
-                          <p class={"text-sm font-medium #{severity_class(alert.severity)}"}>
-                            <%= alert.message %>
-                          </p>
-                          <p class="text-xs text-gray-500 mt-1">
-                            <%= format_time(alert.inserted_at) %>
-                          </p>
-                        </div>
-                        <%= unless alert.acknowledged do %>
-                          <button
-                            phx-click="acknowledge_alert"
-                            phx-value-id={alert.id}
-                            class="ml-2 text-gray-400 hover:text-gray-600"
-                            title="Acknowledge"
-                          >
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                          </button>
-                        <% end %>
-                      </div>
-                    </li>
-                  <% end %>
-                </ul>
               <% end %>
             </div>
           </div>
-        </div>
+        <% end %>
       </div>
     </div>
     """
   end
 
-  # Strategy Card Component
+  # Strategy Card Component - Compact version
   defp strategy_card(assigns) do
+    live_price = Map.get(assigns.live_prices, assigns.strategy.market_ticker)
+
+    assigns = assign(assigns, :live_price, live_price)
+
     ~H"""
-    <div class="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
-      <div class="p-5">
-        <div class="flex justify-between items-start mb-3">
-          <div>
-            <h3 class="text-lg font-bold text-gray-900"><%= @strategy.name %></h3>
-            <p class="text-sm text-gray-500">
-              <%= @strategy.market_ticker || @strategy.event_ticker || "No market selected" %>
+    <div class="bg-white rounded-lg shadow hover:shadow-md transition-all border border-gray-100 overflow-hidden">
+      <!-- Header -->
+      <div class="p-3 border-b border-gray-100">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <h3 class="font-semibold text-gray-900 text-sm truncate" title={@strategy.name}>
+              <%= @strategy.name %>
+            </h3>
+            <p class="text-xs text-gray-500 font-mono truncate" title={@strategy.market_ticker}>
+              <%= truncate_ticker(@strategy.market_ticker || "No market") %>
             </p>
           </div>
-          <span class={status_badge_class(@strategy.status)}>
-            <%= String.capitalize(@strategy.status) %>
-          </span>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <!-- Live status indicator -->
+            <%= if @live_price && @strategy.status == "active" do %>
+              <div class="flex items-center gap-1 px-1.5 py-0.5 bg-green-50 rounded-full border border-green-200">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <span class="text-[10px] font-medium text-green-700">LIVE</span>
+              </div>
+            <% else %>
+              <span class={compact_status_badge(@strategy.status)}></span>
+            <% end %>
+          </div>
         </div>
+      </div>
 
-        <div class="flex items-center gap-4 text-sm text-gray-600 mb-4">
-          <span class="inline-flex items-center">
-            <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+      <!-- Live Price Display -->
+      <div class="px-3 py-2 bg-gray-50">
+        <%= if @live_price do %>
+          <div class="flex items-center justify-between">
+            <div class="flex gap-4">
+              <div class="text-center">
+                <div class="text-[10px] uppercase text-green-600 font-medium">Yes</div>
+                <div class="text-sm font-bold text-green-700"><%= @live_price.yes_bid || "--" %>¢</div>
+              </div>
+              <div class="text-center">
+                <div class="text-[10px] uppercase text-red-600 font-medium">No</div>
+                <div class="text-sm font-bold text-red-700"><%= @live_price.no_bid || "--" %>¢</div>
+              </div>
+            </div>
+            <div class="text-[10px] text-gray-400">
+              Vol: <%= format_volume(@live_price.volume || 0) %>
+            </div>
+          </div>
+        <% else %>
+          <div class="flex items-center justify-center text-xs text-gray-400 py-1">
+            <svg class="w-3 h-3 mr-1.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
             </svg>
-            <%= format_strategy_type(@strategy.type) %>
-          </span>
-          <span class="inline-flex items-center">
-            <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            <%= @strategy.stats["total_alerts"] || 0 %> alerts
-          </span>
-        </div>
+            Waiting for data...
+          </div>
+        <% end %>
+      </div>
 
-        <!-- Config Summary -->
-        <div class="bg-gray-50 rounded-lg p-3 text-xs space-y-1 mb-4">
-          <%= if @strategy.type == "odds_monitor" do %>
-            <.config_line label="Side" value={@strategy.config["target_side"] || "yes"} />
+      <!-- Config Summary -->
+      <div class="px-3 py-2 text-xs">
+        <%= if @strategy.type == "odds_monitor" do %>
+          <div class="flex gap-2 flex-wrap">
             <%= if @strategy.config["price_below"] do %>
-              <.config_line label="Alert below" value={"#{@strategy.config["price_below"]}¢"} />
+              <span class="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">
+                &lt; <%= @strategy.config["price_below"] %>¢
+              </span>
             <% end %>
             <%= if @strategy.config["price_above"] do %>
-              <.config_line label="Alert above" value={"#{@strategy.config["price_above"]}¢"} />
+              <span class="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">
+                &gt; <%= @strategy.config["price_above"] %>¢
+              </span>
             <% end %>
-          <% else %>
-            <.config_line label="Action" value={"#{@strategy.config["action"]} #{@strategy.config["side"]}"} />
-            <.config_line label="Target" value={"#{@strategy.config["target_price"]}¢"} />
-            <.config_line label="Max" value={"#{@strategy.config["max_contracts"]} contracts"} />
-          <% end %>
-        </div>
+          </div>
+        <% else %>
+          <div class="flex items-center gap-2 text-gray-600">
+            <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded font-medium">
+              <%= String.upcase(@strategy.config["action"] || "buy") %> <%= String.upcase(@strategy.config["side"] || "yes") %>
+            </span>
+            <span>@ <%= @strategy.config["target_price"] %>¢</span>
+            <span class="text-gray-400">×<%= @strategy.config["max_contracts"] %></span>
+          </div>
+        <% end %>
+      </div>
 
-        <!-- Actions -->
-        <div class="flex gap-2">
+      <!-- Actions -->
+      <div class="px-3 py-2.5 border-t border-gray-100 bg-gray-50/50">
+        <div class="flex items-center gap-2">
+          <!-- Primary Action: Start/Stop -->
           <%= if @strategy.status == "stopped" || @strategy.status == "paused" do %>
             <button
               phx-click="start_strategy"
               phx-value-id={@strategy.id}
-              class="flex-1 inline-flex justify-center items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+              class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 shadow-sm transition-colors"
             >
-              <%= if @strategy.status == "paused", do: "Resume", else: "Start" %>
+              <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
+              </svg>
+              Start
             </button>
-          <% end %>
-
-          <%= if @strategy.status == "active" do %>
+          <% else %>
             <button
               phx-click="stop_strategy"
               phx-value-id={@strategy.id}
-              class="flex-1 inline-flex justify-center items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+              class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 shadow-sm transition-colors"
             >
+              <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/>
+              </svg>
               Stop
             </button>
           <% end %>
 
+          <!-- Secondary Actions -->
           <.link
             navigate={~p"/kalshi/#{@strategy.id}/orders"}
-            class="px-3 py-2 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+            class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
           >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
             Orders
           </.link>
 
           <.link
             navigate={~p"/kalshi/#{@strategy.id}/edit"}
-            class="px-3 py-2 text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200"
+            class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 transition-colors"
           >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
             Edit
           </.link>
 
+          <!-- Delete (smaller, icon-only) -->
           <button
             phx-click="delete_strategy"
             phx-value-id={@strategy.id}
-            data-confirm="Delete this strategy?"
-            class="px-3 py-2 text-sm font-medium rounded-md text-red-700 bg-white border border-red-300 hover:bg-red-50"
+            data-confirm="Are you sure you want to delete this strategy? This cannot be undone."
+            class="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors"
+            title="Delete strategy"
           >
-            Delete
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
           </button>
         </div>
       </div>
@@ -540,14 +609,6 @@ defmodule SofiTraderWeb.KalshiLive.Index do
     """
   end
 
-  defp config_line(assigns) do
-    ~H"""
-    <div class="flex justify-between">
-      <span class="text-gray-500"><%= @label %>:</span>
-      <span class="font-medium text-gray-900"><%= @value %></span>
-    </div>
-    """
-  end
 
   # Live Dashboard Component
   defp live_dashboard(assigns) do
@@ -627,44 +688,72 @@ defmodule SofiTraderWeb.KalshiLive.Index do
           </div>
         </div>
 
-        <!-- Live Prices and Activity -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Live Price Tickers -->
-          <div class="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden">
-            <div class="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
+        <!-- Live Prices - Full Width Table -->
+        <div class="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden mb-4">
+          <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+            <div class="flex items-center gap-2">
               <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
-              <span class="text-white font-medium text-sm">Live Prices</span>
+              <span class="text-white font-medium text-sm">Live Market Data</span>
             </div>
-            <div class="p-4 max-h-40 overflow-y-auto">
-              <%= if map_size(@live_prices) == 0 do %>
-                <div class="text-slate-500 text-sm text-center py-2">
-                  No live price data yet
-                </div>
-              <% else %>
-                <div class="space-y-2">
-                  <%= for {ticker, data} <- @live_prices do %>
-                    <div class="flex items-center justify-between text-sm">
-                      <span class="text-slate-300 font-mono text-xs truncate max-w-[120px]" title={ticker}>
-                        <%= truncate_ticker(ticker) %>
-                      </span>
-                      <div class="flex items-center gap-3">
-                        <span class="text-green-400 font-medium">
-                          Y: <%= data.yes_bid || data.yes_ask || "-" %>¢
-                        </span>
-                        <span class="text-red-400 font-medium">
-                          N: <%= data.no_bid || data.no_ask || "-" %>¢
-                        </span>
-                      </div>
-                    </div>
-                  <% end %>
-                </div>
-              <% end %>
-            </div>
+            <span class="text-slate-500 text-xs"><%= map_size(@live_prices) %> markets</span>
           </div>
+          <%= if map_size(@live_prices) == 0 do %>
+            <div class="p-6 text-slate-500 text-sm text-center">
+              <svg class="w-8 h-8 mx-auto mb-2 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Start a strategy to see live market data
+            </div>
+          <% else %>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="text-xs text-slate-400 uppercase bg-slate-900/50">
+                  <tr>
+                    <th class="px-4 py-2 text-left">Market</th>
+                    <th class="px-3 py-2 text-center">Yes Bid</th>
+                    <th class="px-3 py-2 text-center">Yes Ask</th>
+                    <th class="px-3 py-2 text-center">Spread</th>
+                    <th class="px-3 py-2 text-right">Volume</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700/50">
+                  <%= for {ticker, data} <- @live_prices do %>
+                    <tr class="hover:bg-slate-700/30 transition-colors">
+                      <td class="px-4 py-3">
+                        <div class="font-mono text-xs text-slate-300" title={ticker}>
+                          <%= ticker %>
+                        </div>
+                      </td>
+                      <td class="px-3 py-3 text-center">
+                        <span class="text-green-400 font-bold"><%= data.yes_bid || "--" %>¢</span>
+                      </td>
+                      <td class="px-3 py-3 text-center">
+                        <span class="text-green-300"><%= data.yes_ask || "--" %>¢</span>
+                      </td>
+                      <td class="px-3 py-3 text-center">
+                        <% spread = calculate_spread(data.yes_bid, data.yes_ask) %>
+                        <span class={[
+                          "px-1.5 py-0.5 rounded text-xs font-medium",
+                          spread_class(spread)
+                        ]}>
+                          <%= spread %>¢
+                        </span>
+                      </td>
+                      <td class="px-3 py-3 text-right text-slate-400">
+                        <%= format_volume(data.volume || 0) %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </div>
 
-          <!-- Activity Feed -->
+        <!-- Activity Feed -->
+        <div class="grid grid-cols-1 gap-4">
           <div class="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden">
             <div class="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
               <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1052,17 +1141,36 @@ defmodule SofiTraderWeb.KalshiLive.Index do
   defp status_badge_class("paused"), do: "px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800"
   defp status_badge_class(_), do: "px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800"
 
+  # Compact badges for new card design
+  defp compact_status_badge("active"), do: "w-2.5 h-2.5 rounded-full bg-green-400 ring-2 ring-green-100"
+  defp compact_status_badge("paused"), do: "w-2.5 h-2.5 rounded-full bg-yellow-400 ring-2 ring-yellow-100"
+  defp compact_status_badge(_), do: "w-2.5 h-2.5 rounded-full bg-gray-300 ring-2 ring-gray-100"
+
   defp severity_class("critical"), do: "text-red-600"
   defp severity_class("warning"), do: "text-yellow-600"
   defp severity_class(_), do: "text-gray-900"
 
-  defp format_strategy_type("odds_monitor"), do: "Odds Monitor"
-  defp format_strategy_type("auto_bid"), do: "Auto Bid"
-  defp format_strategy_type(type), do: type
+  defp severity_dot_class("critical"), do: "bg-red-500"
+  defp severity_dot_class("warning"), do: "bg-yellow-500"
+  defp severity_dot_class(_), do: "bg-blue-500"
 
   defp format_time(datetime) do
     Calendar.strftime(datetime, "%H:%M:%S")
   end
+
+  defp format_volume(vol) when vol >= 1_000_000, do: "#{Float.round(vol / 1_000_000, 1)}M"
+  defp format_volume(vol) when vol >= 1_000, do: "#{Float.round(vol / 1_000, 1)}K"
+  defp format_volume(vol), do: to_string(vol)
+
+  defp calculate_spread(nil, _), do: 0
+  defp calculate_spread(_, nil), do: 0
+  defp calculate_spread(bid, ask) when is_number(bid) and is_number(ask), do: abs(ask - bid)
+  defp calculate_spread(_, _), do: 0
+
+  # Spread color coding: tight spread = good (green), wide spread = bad (red)
+  defp spread_class(spread) when spread <= 2, do: "bg-green-500/20 text-green-300"
+  defp spread_class(spread) when spread <= 5, do: "bg-yellow-500/20 text-yellow-300"
+  defp spread_class(_), do: "bg-red-500/20 text-red-300"
 
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)

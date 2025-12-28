@@ -17,6 +17,7 @@ defmodule SofiTraderWeb.KalshiLive.Markets do
       |> assign(:error, nil)
       |> assign(:search, "")
       |> assign(:status_filter, "open")
+      |> assign(:settling_soon, false)
       |> assign(:api_configured, api_configured?())
 
     if connected?(socket) && api_configured?() do
@@ -28,17 +29,39 @@ defmodule SofiTraderWeb.KalshiLive.Markets do
 
   @impl true
   def handle_info(:load_markets, socket) do
-    case Markets.list_markets(status: socket.assigns.status_filter, limit: 100) do
+    opts = build_market_opts(socket.assigns)
+
+    case Markets.list_markets(opts) do
       {:ok, %{"markets" => markets}} ->
+        markets = maybe_sort_by_close_time(markets, socket.assigns.settling_soon)
         {:noreply, assign(socket, markets: markets, loading: false)}
 
       {:ok, markets} when is_list(markets) ->
+        markets = maybe_sort_by_close_time(markets, socket.assigns.settling_soon)
         {:noreply, assign(socket, markets: markets, loading: false)}
 
       {:error, reason} ->
         {:noreply, assign(socket, error: inspect(reason), loading: false)}
     end
   end
+
+  defp build_market_opts(assigns) do
+    opts = [status: assigns.status_filter, limit: 200]
+
+    if assigns.settling_soon do
+      # Get markets closing within the next 24 hours
+      now = System.system_time(:second)
+      twenty_four_hours = 24 * 60 * 60
+      opts ++ [min_close_ts: now, max_close_ts: now + twenty_four_hours]
+    else
+      opts
+    end
+  end
+
+  defp maybe_sort_by_close_time(markets, true) do
+    Enum.sort_by(markets, fn m -> m["close_time"] || m["expiration_time"] || "" end)
+  end
+  defp maybe_sort_by_close_time(markets, false), do: markets
 
   @impl true
   def handle_event("search", %{"search" => search}, socket) do
@@ -50,6 +73,17 @@ defmodule SofiTraderWeb.KalshiLive.Markets do
     socket =
       socket
       |> assign(:status_filter, status)
+      |> assign(:loading, true)
+
+    send(self(), :load_markets)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("toggle_settling_soon", _, socket) do
+    socket =
+      socket
+      |> assign(:settling_soon, !socket.assigns.settling_soon)
       |> assign(:loading, true)
 
     send(self(), :load_markets)
@@ -96,51 +130,74 @@ defmodule SofiTraderWeb.KalshiLive.Markets do
           </div>
         <% else %>
           <!-- Filters -->
-          <div class="mb-6 flex gap-4 items-center">
-            <div class="flex-1">
-              <input
-                type="text"
-                placeholder="Search markets..."
-                value={@search}
-                phx-keyup="search"
-                phx-debounce="300"
-                class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-              />
+          <div class="mb-6 space-y-3">
+            <div class="flex gap-4 items-center">
+              <div class="flex-1">
+                <input
+                  type="text"
+                  placeholder="Search markets..."
+                  value={@search}
+                  phx-keyup="search"
+                  phx-debounce="300"
+                  class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div class="flex gap-2">
+                <button
+                  phx-click="filter_status"
+                  phx-value-status="open"
+                  class={"px-4 py-2 text-sm font-medium rounded-md #{if @status_filter == "open", do: "bg-indigo-600 text-white", else: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}"}
+                >
+                  Open
+                </button>
+                <button
+                  phx-click="filter_status"
+                  phx-value-status="unopened"
+                  class={"px-4 py-2 text-sm font-medium rounded-md #{if @status_filter == "unopened", do: "bg-indigo-600 text-white", else: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}"}
+                >
+                  Upcoming
+                </button>
+                <button
+                  phx-click="filter_status"
+                  phx-value-status="closed"
+                  class={"px-4 py-2 text-sm font-medium rounded-md #{if @status_filter == "closed", do: "bg-indigo-600 text-white", else: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}"}
+                >
+                  Closed
+                </button>
+              </div>
+
+              <button
+                phx-click="refresh"
+                class="p-2 text-gray-500 hover:text-gray-700"
+                title="Refresh"
+              >
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
             </div>
 
-            <div class="flex gap-2">
+            <!-- Settling Soon Toggle -->
+            <div class="flex items-center gap-3">
               <button
-                phx-click="filter_status"
-                phx-value-status="open"
-                class={"px-4 py-2 text-sm font-medium rounded-md #{if @status_filter == "open", do: "bg-indigo-600 text-white", else: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}"}
+                phx-click="toggle_settling_soon"
+                class={"inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors #{if @settling_soon, do: "bg-orange-100 text-orange-700 border-2 border-orange-300", else: "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"}"}
               >
-                Open
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Settling Soon
+                <%= if @settling_soon do %>
+                  <span class="text-xs bg-orange-200 px-1.5 py-0.5 rounded">24h</span>
+                <% end %>
               </button>
-              <button
-                phx-click="filter_status"
-                phx-value-status="unopened"
-                class={"px-4 py-2 text-sm font-medium rounded-md #{if @status_filter == "unopened", do: "bg-indigo-600 text-white", else: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}"}
-              >
-                Upcoming
-              </button>
-              <button
-                phx-click="filter_status"
-                phx-value-status="closed"
-                class={"px-4 py-2 text-sm font-medium rounded-md #{if @status_filter == "closed", do: "bg-indigo-600 text-white", else: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}"}
-              >
-                Closed
-              </button>
+              <%= if @settling_soon do %>
+                <span class="text-sm text-gray-500">
+                  Showing markets closing within 24 hours, sorted by close time
+                </span>
+              <% end %>
             </div>
-
-            <button
-              phx-click="refresh"
-              class="p-2 text-gray-500 hover:text-gray-700"
-              title="Refresh"
-            >
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
           </div>
 
           <!-- Loading State -->
@@ -180,16 +237,29 @@ defmodule SofiTraderWeb.KalshiLive.Markets do
   end
 
   defp market_card(assigns) do
+    time_remaining = calculate_time_remaining(assigns.market["close_time"] || assigns.market["expiration_time"])
+    assigns = assign(assigns, :time_remaining, time_remaining)
+
     ~H"""
     <div class="bg-white rounded-lg shadow hover:shadow-lg transition-shadow p-4">
-      <div class="flex justify-between items-start mb-3">
-        <h3 class="text-sm font-semibold text-gray-900 line-clamp-2">
+      <div class="flex justify-between items-start mb-2">
+        <h3 class="text-sm font-semibold text-gray-900 line-clamp-2 flex-1 mr-2">
           <%= @market["title"] || @market["ticker"] %>
         </h3>
         <span class={status_badge(@market["status"])}>
           <%= @market["status"] %>
         </span>
       </div>
+
+      <!-- Time Remaining Badge -->
+      <%= if @time_remaining do %>
+        <div class={"mb-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium #{time_remaining_class(@time_remaining)}"}>
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <%= format_time_remaining(@time_remaining) %>
+        </div>
+      <% end %>
 
       <div class="text-xs text-gray-500 mb-3">
         <code class="bg-gray-100 px-1 rounded"><%= @market["ticker"] %></code>
@@ -259,4 +329,60 @@ defmodule SofiTraderWeb.KalshiLive.Markets do
   defp format_volume(vol) when vol >= 1_000_000, do: "#{Float.round(vol / 1_000_000, 1)}M"
   defp format_volume(vol) when vol >= 1_000, do: "#{Float.round(vol / 1_000, 1)}K"
   defp format_volume(vol), do: to_string(vol)
+
+  # Time remaining helpers
+  defp calculate_time_remaining(nil), do: nil
+  defp calculate_time_remaining(close_time) when is_binary(close_time) do
+    case DateTime.from_iso8601(close_time) do
+      {:ok, dt, _} ->
+        now = DateTime.utc_now()
+        diff = DateTime.diff(dt, now, :second)
+        if diff > 0, do: diff, else: nil
+      _ -> nil
+    end
+  end
+  defp calculate_time_remaining(close_time) when is_integer(close_time) do
+    now = System.system_time(:second)
+    diff = close_time - now
+    if diff > 0, do: diff, else: nil
+  end
+  defp calculate_time_remaining(_), do: nil
+
+  defp format_time_remaining(nil), do: ""
+  defp format_time_remaining(seconds) when seconds < 60 do
+    "#{seconds}s remaining"
+  end
+  defp format_time_remaining(seconds) when seconds < 3600 do
+    mins = div(seconds, 60)
+    "#{mins}m remaining"
+  end
+  defp format_time_remaining(seconds) when seconds < 86400 do
+    hours = div(seconds, 3600)
+    mins = div(rem(seconds, 3600), 60)
+    "#{hours}h #{mins}m remaining"
+  end
+  defp format_time_remaining(seconds) do
+    days = div(seconds, 86400)
+    hours = div(rem(seconds, 86400), 3600)
+    "#{days}d #{hours}h remaining"
+  end
+
+  # Color coding based on urgency
+  defp time_remaining_class(nil), do: "bg-gray-100 text-gray-600"
+  defp time_remaining_class(seconds) when seconds < 3600 do
+    # Less than 1 hour - urgent red
+    "bg-red-100 text-red-700 border border-red-200"
+  end
+  defp time_remaining_class(seconds) when seconds < 14400 do
+    # Less than 4 hours - warning orange
+    "bg-orange-100 text-orange-700 border border-orange-200"
+  end
+  defp time_remaining_class(seconds) when seconds < 86400 do
+    # Less than 24 hours - yellow
+    "bg-yellow-100 text-yellow-700 border border-yellow-200"
+  end
+  defp time_remaining_class(_) do
+    # More than 24 hours - neutral
+    "bg-gray-100 text-gray-600"
+  end
 end

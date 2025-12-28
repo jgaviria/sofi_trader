@@ -73,7 +73,7 @@ config :sofi_trader, :kalshi,
   demo_url: "https://demo-api.kalshi.co",
   websocket_url: "wss://api.elections.kalshi.com/trade-api/ws/v2",
   demo_websocket_url: "wss://demo-api.kalshi.co/trade-api/ws/v2",
-  demo: true
+  demo: false  # Production mode
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

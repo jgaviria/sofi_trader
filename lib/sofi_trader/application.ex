@@ -22,6 +22,13 @@ defmodule SofiTrader.Application do
       []
     end
 
+    # Conditionally start AI Sports Scanner if OpenAI API is configured
+    ai_scanner = if openai_configured?() do
+      [SofiTrader.AI.SportsOpportunityScanner]
+    else
+      []
+    end
+
     children = [
       SofiTraderWeb.Telemetry,
       SofiTrader.Repo,
@@ -39,7 +46,7 @@ defmodule SofiTrader.Application do
       # Kalshi prediction markets system
       {Registry, keys: :unique, name: SofiTrader.KalshiStrategyRegistry},
       SofiTrader.Kalshi.StrategySupervisor
-    ] ++ kalshi_websocket ++ [
+    ] ++ kalshi_websocket ++ ai_scanner ++ [
       # Start to serve requests, typically the last entry
       SofiTraderWeb.Endpoint
     ]
@@ -80,5 +87,10 @@ defmodule SofiTrader.Application do
 
     is_binary(api_key) and byte_size(api_key) > 0 and
     is_binary(private_key) and byte_size(private_key) > 0
+  end
+
+  defp openai_configured? do
+    api_key = System.get_env("OPENAI_API_KEY")
+    is_binary(api_key) and byte_size(api_key) > 0
   end
 end
