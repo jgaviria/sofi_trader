@@ -24,6 +24,7 @@ defmodule SofiTrader.AI.SportsAnalyzer do
   require Logger
 
   alias SofiTrader.AI.OpenAIClient
+  alias SofiTrader.AI.SportsContextFetcher
 
   # Base system prompt - used for all sports
   @base_system_prompt """
@@ -728,10 +729,11 @@ defmodule SofiTrader.AI.SportsAnalyzer do
   Analyze a single market for mispricing.
 
   ## Options
-    - `:model` - Model to use (default: "o4-mini" for reasoning)
-      - "o4-mini" - Good reasoning model
+    - `:model` - Model to use (default: "gpt-4o" for best current reasoning)
+      - "gpt-4o" - Recommended: best balance of speed and reasoning
+      - "o4-mini" - Good reasoning model, slower
       - "o3" - Advanced reasoning model
-      - "gpt-4o" - Standard model, fastest
+    - `:fetch_context` - Whether to fetch real-time web context (default: true)
     - `:deep` - Use more thorough analysis with higher token limit
 
   ## Returns
@@ -739,21 +741,41 @@ defmodule SofiTrader.AI.SportsAnalyzer do
     - `{:error, reason}` - If analysis fails
   """
   def analyze(market, opts \\ []) do
-    # Use o4-mini for good reasoning on sports analysis
-    model = Keyword.get(opts, :model, "o4-mini")
+    # Use gpt-4o for good reasoning with latest knowledge
+    model = Keyword.get(opts, :model, "gpt-4o")
+    fetch_context = Keyword.get(opts, :fetch_context, true)
 
-    prompt = build_prompt(market)
+    # Parse teams from title for context fetching
+    {team_a, team_b} = parse_teams_from_title(market.title)
+
+    # Fetch real-time context from web if enabled
+    web_context = if fetch_context do
+      case SportsContextFetcher.fetch_match_context(team_a, team_b, market.sport) do
+        {:ok, context} ->
+          Logger.info("[SportsAnalyzer] Fetched web context for #{team_a} vs #{team_b}")
+          SportsContextFetcher.format_context_for_prompt(context)
+        {:error, reason} ->
+          Logger.warning("[SportsAnalyzer] Failed to fetch context: #{inspect(reason)}")
+          ""
+      end
+    else
+      ""
+    end
+
+    # Build prompt with web context included
+    prompt = build_prompt_with_context(market, web_context)
 
     # Get sport-specific system prompt for better analysis
     system_prompt = get_system_prompt(market.sport)
 
     Logger.info("[SportsAnalyzer] Analyzing: #{market.title} (#{market.sport}) with #{model}")
 
-    # o-series models don't use temperature parameter
+    # Call the AI for analysis
     case OpenAIClient.chat(prompt,
            system: system_prompt,
            model: model,
-           max_tokens: 3000   # Allow detailed reasoning for comprehensive analysis
+           max_tokens: 3000,   # Allow detailed reasoning for comprehensive analysis
+           temperature: 0.5    # Slightly lower temperature for more factual analysis
          ) do
       {:ok, response} ->
         parse_response(response, market)
@@ -799,6 +821,13 @@ defmodule SofiTrader.AI.SportsAnalyzer do
   Build the analysis prompt for a market.
   """
   def build_prompt(market) do
+    build_prompt_with_context(market, "")
+  end
+
+  @doc """
+  Build the analysis prompt for a market with optional web context.
+  """
+  def build_prompt_with_context(market, web_context) do
     # Use ASK prices (what you'd pay to buy) not BID prices
     yes_price = market.best_yes_price || market.yes_ask || 50
     no_price = market.best_no_price || market.no_ask || 50
@@ -812,7 +841,7 @@ defmodule SofiTrader.AI.SportsAnalyzer do
         nil
     end
 
-    build_user_prompt(
+    base_prompt = build_user_prompt(
       market.title,
       market.subtitle,
       yes_price,
@@ -821,6 +850,17 @@ defmodule SofiTrader.AI.SportsAnalyzer do
       format_close_time(market.close_time),
       rules
     )
+
+    # Prepend web context if available
+    if web_context && web_context != "" do
+      """
+      #{web_context}
+
+      #{base_prompt}
+      """
+    else
+      base_prompt
+    end
   end
 
   # Private functions

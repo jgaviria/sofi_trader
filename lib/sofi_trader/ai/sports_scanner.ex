@@ -448,18 +448,21 @@ defmodule SofiTrader.AI.SportsScanner do
   end
 
   # Check if market is for team A (first team in matchup)
+  # Uses the ticker structure: SERIES-DATEAABB-XX where AA is team A code, BB is team B code
   defp is_team_a_market?(market) do
     ticker = market["ticker"] || ""
     suffix = ticker |> String.split("-") |> List.last() |> String.upcase()
-    # Team A suffix is typically 3 letters matching first team abbreviation
-    # Not TIE and not clearly team B
-    suffix != "TIE" && is_first_team_suffix?(market, suffix)
+
+    # Not TIE and suffix matches first team code in the ticker
+    suffix != "TIE" && is_first_team_in_ticker?(ticker, suffix)
   end
 
   defp is_team_b_market?(market) do
     ticker = market["ticker"] || ""
     suffix = ticker |> String.split("-") |> List.last() |> String.upcase()
-    suffix != "TIE" && !is_first_team_suffix?(market, suffix)
+
+    # Not TIE and suffix matches second team code in the ticker
+    suffix != "TIE" && is_second_team_in_ticker?(ticker, suffix)
   end
 
   defp is_tie_market?(market) do
@@ -468,49 +471,98 @@ defmodule SofiTrader.AI.SportsScanner do
     suffix == "TIE"
   end
 
-  # Determine if suffix matches first team in title
-  defp is_first_team_suffix?(market, suffix) do
-    title = market["title"] || ""
-    # Extract first team from "Team A vs Team B Winner?"
-    case Regex.run(~r/(.+?) vs/, title) do
-      [_, first_team] ->
-        # Check if suffix is abbreviation of first team
-        first_team_up = String.upcase(first_team)
-        String.starts_with?(first_team_up, suffix) ||
-        String.contains?(first_team_up, suffix) ||
-        team_abbreviation_matches?(first_team, suffix)
-      _ -> false
+  # Extract team codes from ticker middle segment and check if suffix is the first team
+  # Ticker format: KXSERIES-YYMMMDDAABB-XX where AABB are team codes (e.g., ALGGEQ = ALG + GEQ)
+  defp is_first_team_in_ticker?(ticker, suffix) do
+    case extract_team_codes_from_ticker(ticker) do
+      {team_a_code, _team_b_code} -> suffix == team_a_code
+      nil -> false
     end
   end
 
-  # Common team abbreviation matching
-  defp team_abbreviation_matches?(team_name, suffix) do
-    team_up = String.upcase(team_name)
+  defp is_second_team_in_ticker?(ticker, suffix) do
+    case extract_team_codes_from_ticker(ticker) do
+      {_team_a_code, team_b_code} -> suffix == team_b_code
+      nil -> false
+    end
+  end
+
+  # Extract both team codes from the ticker
+  # Returns {team_a_code, team_b_code} or nil if can't parse
+  defp extract_team_codes_from_ticker(ticker) do
+    parts = String.split(ticker, "-")
+
+    case parts do
+      [_series, middle, outcome] when byte_size(outcome) >= 2 ->
+        # Middle segment format: YYMMMDD followed by team codes (e.g., "25DEC31ALGGEQ")
+        # Extract team codes by removing the date prefix (7 chars: YYMMMDD)
+        middle_up = String.upcase(middle)
+
+        # Try to extract team codes after the date
+        case Regex.run(~r/\d{2}[A-Z]{3}\d{2}([A-Z]+)/, middle_up) do
+          [_, team_codes] ->
+            outcome_up = String.upcase(outcome)
+            # The outcome suffix tells us one team code, use it to split the combined codes
+            extract_teams_using_outcome(team_codes, outcome_up)
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  # Given combined team codes (e.g., "ALGGEQ") and one outcome (e.g., "ALG"),
+  # determine which is team A and which is team B based on position
+  defp extract_teams_using_outcome(team_codes, outcome) do
     cond do
-      String.contains?(team_up, "MANCHESTER UNITED") -> suffix == "MUN"
-      String.contains?(team_up, "MANCHESTER CITY") -> suffix == "MCI"
-      String.contains?(team_up, "RANGERS") -> suffix == "RFC"
-      String.contains?(team_up, "CELTIC") -> suffix == "CEL"
-      String.contains?(team_up, "LIVERPOOL") -> suffix == "LFC"
-      String.contains?(team_up, "ARSENAL") -> suffix == "ARS"
-      String.contains?(team_up, "CHELSEA") -> suffix == "CFC"
-      String.contains?(team_up, "TOTTENHAM") -> suffix == "TOT"
-      true -> false
+      # Outcome is at the start - it's team A
+      String.starts_with?(team_codes, outcome) ->
+        team_b = String.replace_prefix(team_codes, outcome, "")
+        if team_b != "" and team_b != team_codes do
+          {outcome, team_b}
+        else
+          nil
+        end
+
+      # Outcome is at the end - it's team B
+      String.ends_with?(team_codes, outcome) ->
+        team_a = String.replace_suffix(team_codes, outcome, "")
+        if team_a != "" and team_a != team_codes do
+          {team_a, outcome}
+        else
+          nil
+        end
+
+      true ->
+        nil
     end
   end
 
   # Format consolidated game with all three outcomes
+  # IMPORTANT: Maps prices to teams based on title order, not ticker order
   defp format_consolidated_game(base, team_a_market, team_b_market, tie_market) do
     title = base["title"] || ""
     ticker = base["ticker"] || ""
 
-    {team_a, team_b, _} = parse_game_title(title)
+    # team_a/team_b are from the TITLE (first and second team mentioned)
+    {title_team_a, title_team_b, _} = parse_game_title(title)
     sport = categorize_game_sport(ticker)
     game_date = parse_game_date_from_ticker(ticker)
 
-    # Get YES prices for each outcome (probability that outcome happens)
-    team_a_yes = if team_a_market, do: team_a_market["yes_ask"], else: nil
-    team_b_yes = if team_b_market, do: team_b_market["yes_ask"], else: nil
+    # Get ticker team codes to determine if title order matches ticker order
+    ticker_codes = extract_team_codes_from_ticker(ticker)
+
+    # Match prices to TITLE teams, not ticker teams
+    # If title order matches ticker order, use team_a_market for title_team_a
+    # If reversed, swap them
+    {first_team_market, second_team_market} =
+      match_markets_to_title_teams(title_team_a, title_team_b, ticker_codes, team_a_market, team_b_market)
+
+    # Get YES prices for each title team
+    title_team_a_yes = if first_team_market, do: first_team_market["yes_ask"], else: nil
+    title_team_b_yes = if second_team_market, do: second_team_market["yes_ask"], else: nil
     tie_yes = if tie_market, do: tie_market["yes_ask"], else: nil
 
     # Use base ticker (without outcome suffix) as the canonical ticker
@@ -522,23 +574,23 @@ defmodule SofiTrader.AI.SportsScanner do
     |> Enum.map(fn m -> m["volume"] || 0 end)
     |> Enum.sum()
 
-    # Calculate spread from team A market (or use defaults)
-    yes_bid = if team_a_market, do: team_a_market["yes_bid"] || 0, else: 0
-    yes_ask = team_a_yes || 100
-    no_bid = if team_a_market, do: team_a_market["no_bid"] || 0, else: 0
-    no_ask = if team_a_market, do: team_a_market["no_ask"] || 100, else: 100
+    # Calculate spread from first team market (or use defaults)
+    yes_bid = if first_team_market, do: first_team_market["yes_bid"] || 0, else: 0
+    yes_ask = title_team_a_yes || 100
+    no_bid = if first_team_market, do: first_team_market["no_bid"] || 0, else: 0
+    no_ask = if first_team_market, do: first_team_market["no_ask"] || 100, else: 100
 
     %{
       ticker: base_ticker,
       title: title,
-      team_a: team_a,
-      team_b: team_b,
-      team_a_yes: team_a_yes,
-      team_b_yes: team_b_yes,
+      team_a: title_team_a,
+      team_b: title_team_b,
+      team_a_yes: title_team_a_yes,
+      team_b_yes: title_team_b_yes,
       tie_yes: tie_yes,
       # Keep old fields for compatibility
-      best_yes_price: team_a_yes,
-      best_no_price: team_b_yes,
+      best_yes_price: title_team_a_yes,
+      best_no_price: title_team_b_yes,
       yes_bid: yes_bid,
       yes_ask: yes_ask,
       no_bid: no_bid,
@@ -556,11 +608,142 @@ defmodule SofiTrader.AI.SportsScanner do
       rules_primary: base["rules_primary"],
       rules_secondary: base["rules_secondary"],
       subtitle: base["subtitle"],
-      # Store individual market tickers for trading
-      team_a_ticker: if(team_a_market, do: team_a_market["ticker"]),
-      team_b_ticker: if(team_b_market, do: team_b_market["ticker"]),
+      # Store individual market tickers for trading (matched to title teams)
+      team_a_ticker: if(first_team_market, do: first_team_market["ticker"]),
+      team_b_ticker: if(second_team_market, do: second_team_market["ticker"]),
       tie_ticker: if(tie_market, do: tie_market["ticker"])
     }
+  end
+
+  # Match ticker-identified markets to title-ordered teams
+  # Returns {market_for_title_team_a, market_for_title_team_b}
+  defp match_markets_to_title_teams(title_team_a, _title_team_b, ticker_codes, ticker_team_a_market, ticker_team_b_market) do
+    case ticker_codes do
+      {ticker_code_a, ticker_code_b} ->
+        # Check if title team A matches ticker team A (by checking if code is in team name)
+        title_a_matches_ticker_a = team_name_matches_code?(title_team_a, ticker_code_a)
+        title_a_matches_ticker_b = team_name_matches_code?(title_team_a, ticker_code_b)
+
+        cond do
+          # Title team A matches ticker team A - same order
+          title_a_matches_ticker_a and not title_a_matches_ticker_b ->
+            {ticker_team_a_market, ticker_team_b_market}
+
+          # Title team A matches ticker team B - reversed order
+          title_a_matches_ticker_b and not title_a_matches_ticker_a ->
+            {ticker_team_b_market, ticker_team_a_market}
+
+          # Can't determine - use default order
+          true ->
+            {ticker_team_a_market, ticker_team_b_market}
+        end
+
+      nil ->
+        # Couldn't parse ticker codes - use default order
+        {ticker_team_a_market, ticker_team_b_market}
+    end
+  end
+
+  # Check if a team name matches a ticker code
+  # e.g., "Algeria" matches "ALG", "Equatorial Guinea" matches "GEQ"
+  defp team_name_matches_code?(team_name, code) when is_binary(team_name) and is_binary(code) do
+    team_up = String.upcase(team_name)
+    code_up = String.upcase(code)
+
+    # Check common patterns:
+    # 1. Team name starts with code (Algeria -> ALG)
+    # 2. First letters of multi-word name (Equatorial Guinea -> EG... hmm not GEQ)
+    # 3. Known abbreviations
+
+    String.starts_with?(team_up, code_up) ||
+    known_team_code_match?(team_up, code_up) ||
+    initials_match?(team_name, code_up)
+  end
+  defp team_name_matches_code?(_, _), do: false
+
+  # Known team name to code mappings
+  defp known_team_code_match?(team_up, code) do
+    mappings = %{
+      # AFCON teams
+      "EQUATORIAL GUINEA" => "GEQ",
+      "GUINEA" => "GUI",
+      "IVORY COAST" => "CIV",
+      "COTE D'IVOIRE" => "CIV",
+      "DR CONGO" => "COD",
+      "DEMOCRATIC REPUBLIC" => "COD",
+      "BURKINA FASO" => "BFA",
+      "SOUTH AFRICA" => "RSA",
+      "CAPE VERDE" => "CPV",
+      # European teams
+      "MANCHESTER UNITED" => "MUN",
+      "MANCHESTER CITY" => "MCI",
+      "TOTTENHAM" => "TOT",
+      "LIVERPOOL" => "LIV",
+      "ARSENAL" => "ARS",
+      "CHELSEA" => "CHE",
+      "NEWCASTLE" => "NEW",
+      "WEST HAM" => "WHU",
+      "ASTON VILLA" => "AVL",
+      "NOTTINGHAM FOREST" => "NFO",
+      "CRYSTAL PALACE" => "CRY",
+      "BOURNEMOUTH" => "BOU",
+      "BRIGHTON" => "BHA",
+      "BRENTFORD" => "BRE",
+      "FULHAM" => "FUL",
+      "WOLVERHAMPTON" => "WOL",
+      "WOLVES" => "WOL",
+      "EVERTON" => "EVE",
+      "LEICESTER" => "LEI",
+      "SOUTHAMPTON" => "SOU",
+      "IPSWICH" => "IPS",
+      # Scottish teams
+      "RANGERS" => "RFC",
+      "CELTIC" => "CEL",
+      # Spanish teams
+      "REAL MADRID" => "RMA",
+      "BARCELONA" => "BAR",
+      "ATLETICO" => "ATM",
+      # German teams
+      "BAYERN" => "FCB",
+      "BORUSSIA DORTMUND" => "BVB",
+      "DORTMUND" => "BVB",
+      # Italian teams
+      "JUVENTUS" => "JUV",
+      "AC MILAN" => "ACM",
+      "INTER MILAN" => "INT",
+      "INTER" => "INT",
+      # US teams - NFL
+      "JACKSONVILLE" => "JAC",
+      "INDIANAPOLIS" => "IND",
+      "TENNESSEE" => "TEN",
+      "HOUSTON" => "HOU",
+      # Add more as needed
+    }
+
+    Map.get(mappings, team_up) == code
+  end
+
+  # Check if code matches initials of team name words
+  defp initials_match?(team_name, code) do
+    words = team_name |> String.upcase() |> String.split(~r/\s+/)
+
+    case words do
+      [single_word] ->
+        # Single word - check if code is prefix
+        String.starts_with?(single_word, code)
+
+      multiple_words ->
+        # Multiple words - check various initial combinations
+        initials = multiple_words |> Enum.map(&String.first/1) |> Enum.join()
+        # Also try first 2-3 letters of first word + initials of rest
+        first_word = List.first(multiple_words) || ""
+        first_prefix = String.slice(first_word, 0, 1)
+        rest_initials = multiple_words |> Enum.drop(1) |> Enum.map(&String.first/1) |> Enum.join()
+
+        initials == code ||
+        (first_prefix <> rest_initials) == code ||
+        String.starts_with?(first_word, code)
+    end
   end
 
   # Sort key: prioritize today's games, then tomorrow, then by volume
