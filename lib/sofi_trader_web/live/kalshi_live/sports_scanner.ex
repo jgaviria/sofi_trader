@@ -8,6 +8,7 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
   use SofiTraderWeb, :live_view
 
   alias SofiTrader.AI.{SportsScanner, SportsAnalyzer, SportsOpportunityScanner, OpenAIClient}
+  alias SofiTrader.Kalshi.Portfolio
 
   @impl true
   def mount(_params, _session, socket) do
@@ -15,6 +16,8 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
       # Subscribe to AI opportunities
       Phoenix.PubSub.subscribe(SofiTrader.PubSub, "ai:opportunities")
       Phoenix.PubSub.subscribe(SofiTrader.PubSub, "kalshi:alerts")
+      # Refresh portfolio every 30 seconds
+      :timer.send_interval(30_000, self(), :refresh_portfolio)
     end
 
     socket =
@@ -30,8 +33,28 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
       |> assign(:openai_configured, OpenAIClient.configured?())
       |> assign(:sport_filter, nil)
       |> assign(:error, nil)
+      |> assign(:portfolio, nil)
+      |> load_portfolio()
 
     {:ok, socket}
+  end
+
+  defp load_portfolio(socket) do
+    case Portfolio.get_balance() do
+      {:ok, balance} ->
+        case Portfolio.list_positions(settlement_status: "unsettled", limit: 20) do
+          {:ok, positions} ->
+            assign(socket, :portfolio, %{
+              balance: balance,
+              positions: positions["market_positions"] || [],
+              event_positions: positions["event_positions"] || []
+            })
+          _ ->
+            assign(socket, :portfolio, %{balance: balance, positions: [], event_positions: []})
+        end
+      _ ->
+        socket
+    end
   end
 
   @impl true
@@ -47,7 +70,7 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
 
   @impl true
   def handle_event("filter_sport", %{"sport" => sport}, socket) do
-    sport_atom = if sport == "all", do: nil, else: String.to_existing_atom(sport)
+    sport_atom = string_to_sport(sport)
 
     socket =
       socket
@@ -146,6 +169,11 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
   end
 
   @impl true
+  def handle_info(:refresh_portfolio, socket) do
+    {:noreply, load_portfolio(socket)}
+  end
+
+  @impl true
   def handle_info(_, socket), do: {:noreply, socket}
 
   defp get_scanner_status do
@@ -178,6 +206,55 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
             ← Back to Strategies
           </.link>
         </div>
+
+        <!-- Portfolio Summary -->
+        <%= if @portfolio do %>
+          <div class="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg shadow-lg p-4 mb-6 text-white">
+            <div class="flex items-center justify-between">
+              <!-- Balance Info -->
+              <div class="flex items-center gap-8">
+                <div>
+                  <div class="text-xs text-indigo-200 uppercase tracking-wide">Cash Balance</div>
+                  <div class="text-2xl font-bold"><%= format_dollars(@portfolio.balance["balance"]) %></div>
+                </div>
+                <div class="border-l border-indigo-400 pl-8">
+                  <div class="text-xs text-indigo-200 uppercase tracking-wide">Current Trades</div>
+                  <div class="text-2xl font-bold"><%= format_dollars(@portfolio.balance["portfolio_value"]) %></div>
+                </div>
+                <div class="border-l border-indigo-400 pl-8">
+                  <div class="text-xs text-indigo-200 uppercase tracking-wide">Total Value</div>
+                  <div class="text-2xl font-bold"><%= format_dollars((@portfolio.balance["balance"] || 0) + (@portfolio.balance["portfolio_value"] || 0)) %></div>
+                </div>
+              </div>
+
+              <!-- Open Positions -->
+              <div class="text-right">
+                <div class="text-xs text-indigo-200 uppercase tracking-wide">Open Positions</div>
+                <div class="text-2xl font-bold"><%= length(@portfolio.positions) %></div>
+              </div>
+            </div>
+
+            <!-- Position Details (if any) -->
+            <%= if length(@portfolio.positions) > 0 do %>
+              <div class="mt-4 pt-4 border-t border-indigo-400">
+                <div class="text-xs text-indigo-200 uppercase tracking-wide mb-2">Current Positions</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <%= for pos <- Enum.take(@portfolio.positions, 6) do %>
+                    <div class="bg-white/10 rounded-lg px-3 py-2">
+                      <div class="text-sm font-medium truncate"><%= format_position_ticker(pos["ticker"]) %></div>
+                      <div class="flex justify-between text-xs mt-1">
+                        <span class={"#{if pos["position"] > 0, do: "text-green-300", else: "text-red-300"}"}>
+                          <%= if pos["position"] > 0, do: "YES", else: "NO" %> <%= abs(pos["position"]) %> contracts
+                        </span>
+                        <span class="text-indigo-200"><%= format_dollars(pos["market_exposure"]) %></span>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
 
         <!-- API Status -->
         <%= unless @openai_configured do %>
@@ -234,18 +311,19 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
                   <h2 class="text-lg font-semibold text-gray-900">Sports Markets</h2>
                   <div class="flex items-center gap-2">
                     <!-- Sport Filter -->
-                    <select
-                      phx-change="filter_sport"
-                      name="sport"
-                      class="text-sm rounded-md border-gray-300"
-                    >
-                      <option value="all" selected={@sport_filter == nil}>All Sports</option>
-                      <option value="soccer" selected={@sport_filter == :soccer}>Soccer</option>
-                      <option value="nfl" selected={@sport_filter == :nfl}>NFL</option>
-                      <option value="nba" selected={@sport_filter == :nba}>NBA</option>
-                      <option value="nhl" selected={@sport_filter == :nhl}>NHL</option>
-                      <option value="mlb" selected={@sport_filter == :mlb}>MLB</option>
-                    </select>
+                    <form phx-change="filter_sport" class="m-0">
+                      <select
+                        name="sport"
+                        class="text-sm rounded-md border-gray-300"
+                      >
+                        <option value="all" selected={@sport_filter == nil}>All Sports</option>
+                        <option value="soccer" selected={@sport_filter == :soccer}>Soccer</option>
+                        <option value="nfl" selected={@sport_filter == :nfl}>NFL</option>
+                        <option value="nba" selected={@sport_filter == :nba}>NBA</option>
+                        <option value="nhl" selected={@sport_filter == :nhl}>NHL</option>
+                        <option value="mlb" selected={@sport_filter == :mlb}>MLB</option>
+                      </select>
+                    </form>
 
                     <button
                       phx-click="scan_markets"
@@ -278,6 +356,7 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
                   <%= for market <- @markets do %>
                     <% {team_yes, team_no} = parse_teams_from_title(market.title) %>
                     <% game_status = get_game_status(market.game_date) %>
+                    <% is_live = game_status.status == :live %>
                     <div class={"p-4 border-b border-gray-100 #{if @selected_market && @selected_market.ticker == market.ticker, do: "bg-indigo-50 ring-2 ring-indigo-500 ring-inset", else: "hover:bg-gray-50"}"}>
                       <!-- Header: Sport badge + Game time -->
                       <div class="flex items-center justify-between mb-3">
@@ -285,37 +364,54 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
                           <span class={"px-2 py-0.5 text-xs font-semibold rounded-full #{sport_badge_class(market.sport)}"}>
                             <%= market.sport |> to_string() |> String.upcase() %>
                           </span>
-                          <span class={"text-xs font-medium px-2 py-0.5 rounded-full #{game_status_class(game_status)}"}>
-                            <%= game_status.label %>
-                          </span>
+                          <%= unless is_live do %>
+                            <span class={"text-xs font-medium px-2 py-0.5 rounded-full #{game_status_class(game_status)}"}>
+                              <%= game_status.label %>
+                            </span>
+                          <% end %>
+                          <%= if market.last_price do %>
+                            <span class="text-xs text-gray-500">
+                              Last: <%= market.last_price %>¢
+                            </span>
+                          <% end %>
                         </div>
-                        <div class="text-xs text-gray-500">
-                          <%= format_game_date(market.game_date) %>
+                        <div class="text-xs">
+                          <%= if is_live do %>
+                            <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold animate-pulse">🔴 LIVE</span>
+                          <% else %>
+                            <span class="text-gray-500"><%= format_game_date(market.game_date) %></span>
+                          <% end %>
                         </div>
                       </div>
 
-                      <!-- Teams matchup -->
-                      <div class="grid grid-cols-7 gap-2 items-center mb-3">
-                        <!-- YES Team -->
-                        <div class="col-span-3 text-center">
-                          <div class="text-sm font-bold text-gray-900"><%= team_yes %></div>
-                          <div class="text-xs text-green-600 font-medium">YES</div>
-                          <div class="text-lg font-bold text-green-600 mt-1">
-                            <%= market.best_yes_price || "--" %><span class="text-sm">¢</span>
+                      <!-- Teams matchup - Kalshi style -->
+                      <div class="mb-4">
+                        <!-- Column headers -->
+                        <div class="flex items-center mb-2 pr-1">
+                          <div class="flex-1 text-xs text-gray-400 pl-1">Market</div>
+                          <div class="w-[72px] text-center text-xs text-gray-400">Yes</div>
+                          <div class="w-[72px] text-center text-xs text-gray-400">No</div>
+                        </div>
+
+                        <!-- Team A row -->
+                        <div class="flex items-center mb-2 pr-1">
+                          <div class="flex-1 text-sm font-medium text-gray-800 truncate pl-1 pr-3"><%= team_yes %></div>
+                          <div class={"w-[72px] h-10 flex items-center justify-center border border-gray-200 rounded-lg ml-1 #{if is_live, do: "animate-pulse", else: ""}"}>
+                            <span class="text-sm font-medium text-green-600"><%= market.team_a_yes || "--" %>¢</span>
+                          </div>
+                          <div class="w-[72px] h-10 flex items-center justify-center border border-gray-200 rounded-lg ml-1">
+                            <span class="text-sm font-medium text-red-500"><%= if market.team_a_yes, do: 100 - market.team_a_yes, else: "--" %>¢</span>
                           </div>
                         </div>
 
-                        <!-- VS -->
-                        <div class="col-span-1 text-center">
-                          <div class="text-xs text-gray-400 font-medium">VS</div>
-                        </div>
-
-                        <!-- NO Team -->
-                        <div class="col-span-3 text-center">
-                          <div class="text-sm font-bold text-gray-900"><%= team_no %></div>
-                          <div class="text-xs text-red-600 font-medium">NO</div>
-                          <div class="text-lg font-bold text-red-600 mt-1">
-                            <%= market.best_no_price || "--" %><span class="text-sm">¢</span>
+                        <!-- Team B row -->
+                        <div class="flex items-center pr-1">
+                          <div class="flex-1 text-sm font-medium text-gray-800 truncate pl-1 pr-3"><%= team_no %></div>
+                          <div class={"w-[72px] h-10 flex items-center justify-center border border-gray-200 rounded-lg ml-1 #{if is_live, do: "animate-pulse", else: ""}"}>
+                            <span class="text-sm font-medium text-green-600"><%= market.team_b_yes || "--" %>¢</span>
+                          </div>
+                          <div class="w-[72px] h-10 flex items-center justify-center border border-gray-200 rounded-lg ml-1">
+                            <span class="text-sm font-medium text-red-500"><%= if market.team_b_yes, do: 100 - market.team_b_yes, else: "--" %>¢</span>
                           </div>
                         </div>
                       </div>
@@ -480,6 +576,22 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
           </div>
         </div>
 
+        <!-- Draw Probability (Soccer only) -->
+        <%= if Map.get(@analysis, :draw_probability) do %>
+          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mb-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">⚽</span>
+                <span class="text-sm font-medium text-yellow-800">Draw Probability</span>
+              </div>
+              <span class="text-lg font-bold text-yellow-700"><%= @analysis.draw_probability %>%</span>
+            </div>
+            <%= if @analysis.draw_probability > 30 do %>
+              <p class="text-xs text-yellow-600 mt-1">High draw likelihood - consider this when betting!</p>
+            <% end %>
+          </div>
+        <% end %>
+
         <!-- Edge Indicator -->
         <%= if @analysis.edge >= 5 do %>
           <div class="flex items-center gap-2 text-green-700 bg-green-100 rounded-lg p-2">
@@ -558,6 +670,15 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
 
   # Helper functions
 
+  # Safe string to sport atom conversion
+  defp string_to_sport("all"), do: nil
+  defp string_to_sport("soccer"), do: :soccer
+  defp string_to_sport("nfl"), do: :nfl
+  defp string_to_sport("nba"), do: :nba
+  defp string_to_sport("nhl"), do: :nhl
+  defp string_to_sport("mlb"), do: :mlb
+  defp string_to_sport(_), do: nil
+
   defp sport_badge_class(:nfl), do: "bg-red-100 text-red-800"
   defp sport_badge_class(:nba), do: "bg-orange-100 text-orange-800"
   defp sport_badge_class(:mlb), do: "bg-blue-100 text-blue-800"
@@ -625,14 +746,24 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
   end
 
   # Determine game status based on game date (Date type parsed from ticker)
+  # For "today" games, check if it's likely live based on current time
   defp get_game_status(nil), do: %{status: :unknown, label: "Unknown"}
   defp get_game_status(%Date{} = game_date) do
     today = Date.utc_today()
     diff_days = Date.diff(game_date, today)
+    current_hour = DateTime.utc_now().hour
 
     cond do
       diff_days < 0 -> %{status: :finished, label: "Finished"}
-      diff_days == 0 -> %{status: :today, label: "🏈 Today"}
+      # Today's games - check if likely in progress
+      diff_days == 0 ->
+        # Games typically run from ~6pm UTC (1pm ET) to ~4am UTC next day
+        # If it's between 17:00 UTC and 04:00 UTC, games might be live
+        if current_hour >= 17 or current_hour < 4 do
+          %{status: :live, label: "🔴 LIVE"}
+        else
+          %{status: :today, label: "🏈 Today"}
+        end
       diff_days == 1 -> %{status: :tomorrow, label: "Tomorrow"}
       diff_days <= 7 -> %{status: :this_week, label: "This Week"}
       true -> %{status: :upcoming, label: "Upcoming"}
@@ -640,6 +771,7 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
   end
   defp get_game_status(_), do: %{status: :unknown, label: "Unknown"}
 
+  defp game_status_class(%{status: :live}), do: "bg-red-100 text-red-700 animate-pulse font-bold"
   defp game_status_class(%{status: :today}), do: "bg-green-100 text-green-700"
   defp game_status_class(%{status: :tomorrow}), do: "bg-blue-100 text-blue-700"
   defp game_status_class(%{status: :this_week}), do: "bg-indigo-100 text-indigo-700"
@@ -660,4 +792,41 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
     end
   end
   defp format_game_date(_), do: "TBD"
+
+  # Format cents to dollars
+  defp format_dollars(nil), do: "$0.00"
+  defp format_dollars(cents) when is_integer(cents) do
+    dollars = cents / 100
+    "$#{:erlang.float_to_binary(dollars, decimals: 2)}"
+  end
+  defp format_dollars(_), do: "$0.00"
+
+  # Format position ticker to readable name
+  # e.g., "KXNFLGAME-25DEC28JACIND-JAC" -> "JAC @ IND (Dec 28)"
+  defp format_position_ticker(ticker) when is_binary(ticker) do
+    cond do
+      # NFL/College Football game format
+      String.contains?(ticker, "GAME-") ->
+        parts = String.split(ticker, "-")
+        case parts do
+          [_, date_teams, team] ->
+            # Extract date and make readable
+            "#{team} (#{extract_date_from_ticker(date_teams)})"
+          _ ->
+            ticker
+        end
+      true ->
+        ticker
+    end
+  end
+  defp format_position_ticker(ticker), do: inspect(ticker)
+
+  defp extract_date_from_ticker(date_teams) do
+    case Regex.run(~r/(\d{2})([A-Z]{3})(\d{2})/, date_teams) do
+      [_, _year, month, day] ->
+        "#{month} #{day}"
+      _ ->
+        ""
+    end
+  end
 end

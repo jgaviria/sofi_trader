@@ -28,17 +28,53 @@ defmodule SofiTrader.AI.SportsScanner do
   # Series tickers for simple game markets (Team A vs Team B)
   # Discovered via Markets.list_series() - actual Kalshi series names
   @game_series [
-    # Soccer/Football
+    # Soccer/Football - Major Leagues
     "KXEPLGAME",        # English Premier League
+    "KXEFLCHAMPIONSHIPGAME", # EFL Championship (English 2nd tier)
+    "KXEFLCUPGAME",     # EFL Cup (League Cup)
+    "KXLALIGAGAME",     # La Liga (Spain)
+    "KXBUNDESLIGAGAME", # Bundesliga (Germany)
+    "KXSERIEAGAME",     # Serie A (Italy)
+    "KXLIGUE1GAME",     # Ligue 1 (France)
+    "KXEREDIVISIEGAME", # Eredivisie (Netherlands)
+    "KXLIGAPORTUGALGAME", # Liga Portugal
+    "KXBELGIANPLGAME",  # Belgian Pro League
+    "KXSUPERLIGGAME",   # Turkish Super Lig
+    "KXSCOTTISHPREMGAME", # Scottish Premiership
+    "KXSWISSLEAGUEGAME", # Swiss Super League
+    "KXDANISHSUPERLIGAGAME", # Danish Superliga
+    "KXEKSTRAKLASAGAME", # Polish Ekstraklasa
+    "KXHNLGAME",        # Croatia HNL
+    # Soccer/Football - Americas
     "KXMLSGAME",        # MLS Soccer
-    "KXLALIGAGAME",     # La Liga
-    "KXBUNDESLIGAGAME", # Bundesliga
-    "KXSERIAGAME",      # Serie A
-    "KXLIGUE1GAME",     # Ligue 1
-    "KXUCLGAME",        # Champions League
-    "KXFIFAGAME",       # FIFA/International Soccer
+    "KXLIGAMXGAME",     # Liga MX (Mexico)
+    "KXBRASILEIROGAME", # Brasileiro Serie A
+    "KXARGPREMDIVGAME", # Argentina Primera Division
+    # Soccer/Football - Asia & Middle East
+    "KXSAUDIPLGAME",    # Saudi Pro League (correct ticker)
+    "KXSPLGAME",        # Saudi Pro League (alternate)
+    "KXSAUDIGAME",      # Saudi Pro League (alternate)
+    "KXJLEAGUEGAME",    # J-League (Japan)
+    "KXKLEAGUEGAME",    # K-League (Korea)
+    "KXCSLGAME",        # Chinese Super League
+    "KXIPLGAME",        # Indian Premier League Cricket (but has soccer too)
+    # Soccer/Football - Other
     "KXALEAGUEGAME",    # Australian A-League
     "KXAFCONGAME",      # Africa Cup of Nations
+    "KXNBLGAME",        # NBL Basketball (Australia)
+    # Soccer/Football - Cups & European Competitions
+    "KXUCLGAME",        # UEFA Champions League
+    "KXUELGAME",        # UEFA Europa League
+    "KXUECLGAME",       # UEFA Europa Conference League
+    "KXCOPADELREYGAME", # Copa del Rey
+    "KXDFBPOKALGAME",   # DFB Pokal
+    "KXCOPPAITALIAGAME", # Coppa Italia
+    "KXITASUPERCUPGAME", # Italy Super Cup
+    "KXTACAPORTGAME",   # Taca de Portugal
+    "KXCLUBWCGAME",     # Club World Cup
+    "KXINTERCONCUPGAME", # Intercontinental Cup
+    "KXFIFAGAME",       # FIFA/International Soccer
+    "KXUEFAGAME",       # UEFA Soccer Games
     # American Football (NFL + College)
     "KXNFLGAME",        # NFL
     "KXNCAAFGAME",      # College Football (FBS)
@@ -109,14 +145,16 @@ defmodule SofiTrader.AI.SportsScanner do
     - `:status` - Market status filter (default: "open")
     - `:min_volume` - Minimum volume filter
     - `:settling_within_hours` - Only markets settling within N hours
-    - `:limit` - Max markets to return per series (default: 50)
+    - `:limit` - Max markets to return per series (default: 200)
 
   ## Returns
     - `{:ok, [market]}` - List of simple game markets
     - `{:error, reason}` - If scan fails
   """
   def scan(opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
+    # Higher limit needed because each game has 3 markets (Team A, Team B, Tie)
+    # 200 per series = ~66 unique games per series after dedup
+    limit = Keyword.get(opts, :limit, 200)
     sport_filter = Keyword.get(opts, :sport)
 
     Logger.info("[SportsScanner] Scanning for simple game markets...")
@@ -142,10 +180,27 @@ defmodule SofiTrader.AI.SportsScanner do
   defp maybe_filter_series(series, nil), do: series
   defp maybe_filter_series(series, :soccer) do
     Enum.filter(series, fn s ->
-      String.contains?(s, "EPL") || String.contains?(s, "FIFA") || String.contains?(s, "MLS") ||
-      String.contains?(s, "LALIGA") || String.contains?(s, "BUNDES") || String.contains?(s, "SERIA") ||
-      String.contains?(s, "LIGUE") || String.contains?(s, "UCL") || String.contains?(s, "ALEAGUE") ||
-      String.contains?(s, "AFCON")
+      # Major European Leagues
+      String.contains?(s, "EPL") || String.contains?(s, "EFLCHAMPIONSHIP") || String.contains?(s, "EFLCUP") ||
+      String.contains?(s, "EFL") || String.contains?(s, "LALIGA") ||
+      String.contains?(s, "BUNDES") || String.contains?(s, "SERIE") || String.contains?(s, "LIGUE") ||
+      String.contains?(s, "EREDIVISIE") || String.contains?(s, "LIGAPORTUGAL") || String.contains?(s, "BELGIANPL") ||
+      String.contains?(s, "SUPERLIG") || String.contains?(s, "SCOTTISHPREM") ||
+      String.contains?(s, "SWISSLEAGUE") || String.contains?(s, "DANISHSUPERLIGA") ||
+      String.contains?(s, "EKSTRAKLASA") || String.contains?(s, "HNL") ||
+      # Americas
+      String.contains?(s, "MLS") || String.contains?(s, "LIGAMX") || String.contains?(s, "BRASILEIRO") ||
+      String.contains?(s, "ARGPREMDIV") ||
+      # Asia & Middle East
+      String.contains?(s, "SAUDIPL") || String.contains?(s, "SAUDI") || String.contains?(s, "JLEAGUE") ||
+      String.contains?(s, "KLEAGUE") ||
+      # Other & Competitions
+      String.contains?(s, "ALEAGUE") || String.contains?(s, "AFCON") || String.contains?(s, "UCL") ||
+      String.contains?(s, "UEL") || String.contains?(s, "UECL") ||
+      String.contains?(s, "COPADELREY") || String.contains?(s, "DFBPOKAL") || String.contains?(s, "COPPAITALIA") ||
+      String.contains?(s, "ITASUPERCUP") || String.contains?(s, "TACAPORT") ||
+      String.contains?(s, "CLUBWC") || String.contains?(s, "INTERCONCUP") ||
+      String.contains?(s, "FIFA") || String.contains?(s, "UEFA")
     end)
   end
   defp maybe_filter_series(series, :nfl) do
@@ -347,7 +402,7 @@ defmodule SofiTrader.AI.SportsScanner do
 
   # Private functions
 
-  # Filter for simple game markets (Team vs Team)
+  # Filter for simple game markets (Team vs Team) and consolidate 3 markets per game
   defp filter_game_markets(markets, opts) do
     min_volume = Keyword.get(opts, :min_volume, 0)
     settling_hours = Keyword.get(opts, :settling_within_hours)
@@ -355,12 +410,157 @@ defmodule SofiTrader.AI.SportsScanner do
     markets
     |> Enum.filter(&is_simple_game?/1)
     |> Enum.filter(&has_reasonable_price?/1)
-    |> Enum.filter(&is_not_finished?/1)  # Filter out finished games
+    |> Enum.filter(&is_not_finished?/1)
     |> maybe_filter_volume(min_volume)
     |> maybe_filter_settling(settling_hours)
-    |> Enum.map(&format_game_for_analysis/1)
-    |> Enum.uniq_by(fn m -> {m.title, m.outcome} end)  # Remove duplicate outcomes
-    |> Enum.sort_by(&game_sort_key/1)  # Sort by date (today first), then volume
+    |> consolidate_game_markets()  # Group 3 markets per game into one
+    |> Enum.sort_by(&game_sort_key/1)
+  end
+
+  # Consolidate all markets for a game (Team A, Team B, Tie) into one entry
+  defp consolidate_game_markets(markets) do
+    markets
+    |> Enum.group_by(&game_base_ticker/1)
+    |> Enum.map(fn {_base_ticker, game_markets} ->
+      # Find each outcome's market
+      team_a_market = Enum.find(game_markets, &is_team_a_market?/1)
+      team_b_market = Enum.find(game_markets, &is_team_b_market?/1)
+      tie_market = Enum.find(game_markets, &is_tie_market?/1)
+
+      # Use any market for base info (prefer team markets over tie)
+      base = team_a_market || team_b_market || tie_market || hd(game_markets)
+
+      format_consolidated_game(base, team_a_market, team_b_market, tie_market)
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  # Extract base ticker without outcome suffix (e.g., KXEPLGAME-25DEC30ARSAVL)
+  defp game_base_ticker(market) do
+    ticker = market["ticker"] || ""
+    # Remove last segment after final dash (the outcome like -TIE, -ARS, -AVL)
+    case String.split(ticker, "-") do
+      parts when length(parts) >= 3 ->
+        parts |> Enum.take(length(parts) - 1) |> Enum.join("-")
+      _ ->
+        ticker
+    end
+  end
+
+  # Check if market is for team A (first team in matchup)
+  defp is_team_a_market?(market) do
+    ticker = market["ticker"] || ""
+    suffix = ticker |> String.split("-") |> List.last() |> String.upcase()
+    # Team A suffix is typically 3 letters matching first team abbreviation
+    # Not TIE and not clearly team B
+    suffix != "TIE" && is_first_team_suffix?(market, suffix)
+  end
+
+  defp is_team_b_market?(market) do
+    ticker = market["ticker"] || ""
+    suffix = ticker |> String.split("-") |> List.last() |> String.upcase()
+    suffix != "TIE" && !is_first_team_suffix?(market, suffix)
+  end
+
+  defp is_tie_market?(market) do
+    ticker = market["ticker"] || ""
+    suffix = ticker |> String.split("-") |> List.last() |> String.upcase()
+    suffix == "TIE"
+  end
+
+  # Determine if suffix matches first team in title
+  defp is_first_team_suffix?(market, suffix) do
+    title = market["title"] || ""
+    # Extract first team from "Team A vs Team B Winner?"
+    case Regex.run(~r/(.+?) vs/, title) do
+      [_, first_team] ->
+        # Check if suffix is abbreviation of first team
+        first_team_up = String.upcase(first_team)
+        String.starts_with?(first_team_up, suffix) ||
+        String.contains?(first_team_up, suffix) ||
+        team_abbreviation_matches?(first_team, suffix)
+      _ -> false
+    end
+  end
+
+  # Common team abbreviation matching
+  defp team_abbreviation_matches?(team_name, suffix) do
+    team_up = String.upcase(team_name)
+    cond do
+      String.contains?(team_up, "MANCHESTER UNITED") -> suffix == "MUN"
+      String.contains?(team_up, "MANCHESTER CITY") -> suffix == "MCI"
+      String.contains?(team_up, "RANGERS") -> suffix == "RFC"
+      String.contains?(team_up, "CELTIC") -> suffix == "CEL"
+      String.contains?(team_up, "LIVERPOOL") -> suffix == "LFC"
+      String.contains?(team_up, "ARSENAL") -> suffix == "ARS"
+      String.contains?(team_up, "CHELSEA") -> suffix == "CFC"
+      String.contains?(team_up, "TOTTENHAM") -> suffix == "TOT"
+      true -> false
+    end
+  end
+
+  # Format consolidated game with all three outcomes
+  defp format_consolidated_game(base, team_a_market, team_b_market, tie_market) do
+    title = base["title"] || ""
+    ticker = base["ticker"] || ""
+
+    {team_a, team_b, _} = parse_game_title(title)
+    sport = categorize_game_sport(ticker)
+    game_date = parse_game_date_from_ticker(ticker)
+
+    # Get YES prices for each outcome (probability that outcome happens)
+    team_a_yes = if team_a_market, do: team_a_market["yes_ask"], else: nil
+    team_b_yes = if team_b_market, do: team_b_market["yes_ask"], else: nil
+    tie_yes = if tie_market, do: tie_market["yes_ask"], else: nil
+
+    # Use base ticker (without outcome suffix) as the canonical ticker
+    base_ticker = game_base_ticker(base)
+
+    # Sum volumes from all markets
+    total_volume = [team_a_market, team_b_market, tie_market]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(fn m -> m["volume"] || 0 end)
+    |> Enum.sum()
+
+    # Calculate spread from team A market (or use defaults)
+    yes_bid = if team_a_market, do: team_a_market["yes_bid"] || 0, else: 0
+    yes_ask = team_a_yes || 100
+    no_bid = if team_a_market, do: team_a_market["no_bid"] || 0, else: 0
+    no_ask = if team_a_market, do: team_a_market["no_ask"] || 100, else: 100
+
+    %{
+      ticker: base_ticker,
+      title: title,
+      team_a: team_a,
+      team_b: team_b,
+      team_a_yes: team_a_yes,
+      team_b_yes: team_b_yes,
+      tie_yes: tie_yes,
+      # Keep old fields for compatibility
+      best_yes_price: team_a_yes,
+      best_no_price: team_b_yes,
+      yes_bid: yes_bid,
+      yes_ask: yes_ask,
+      no_bid: no_bid,
+      no_ask: no_ask,
+      yes_spread: yes_ask - yes_bid,
+      no_spread: no_ask - no_bid,
+      last_price: base["last_price"],
+      volume: total_volume,
+      open_interest: base["open_interest"] || 0,
+      liquidity: base["liquidity"] || 0,
+      close_time: base["close_time"] || base["expiration_time"],
+      game_date: game_date,
+      status: base["status"],
+      sport: sport,
+      rules_primary: base["rules_primary"],
+      rules_secondary: base["rules_secondary"],
+      subtitle: base["subtitle"],
+      # Store individual market tickers for trading
+      team_a_ticker: if(team_a_market, do: team_a_market["ticker"]),
+      team_b_ticker: if(team_b_market, do: team_b_market["ticker"]),
+      tie_ticker: if(tie_market, do: tie_market["ticker"])
+    }
   end
 
   # Sort key: prioritize today's games, then tomorrow, then by volume
@@ -507,17 +707,49 @@ defmodule SofiTrader.AI.SportsScanner do
   defp categorize_game_sport(ticker) do
     ticker_up = String.upcase(ticker)
     cond do
-      # Soccer
+      # Soccer - Major European Leagues
       String.contains?(ticker_up, "EPL") -> :soccer
-      String.contains?(ticker_up, "FIFA") -> :soccer
-      String.contains?(ticker_up, "MLS") -> :soccer
+      String.contains?(ticker_up, "EFLCHAMPIONSHIP") -> :soccer
+      String.contains?(ticker_up, "EFLCUP") -> :soccer
+      String.contains?(ticker_up, "EFL") -> :soccer
       String.contains?(ticker_up, "LALIGA") -> :soccer
       String.contains?(ticker_up, "BUNDES") -> :soccer
-      String.contains?(ticker_up, "SERIA") -> :soccer
+      String.contains?(ticker_up, "SERIE") -> :soccer
       String.contains?(ticker_up, "LIGUE") -> :soccer
-      String.contains?(ticker_up, "UCL") -> :soccer
+      String.contains?(ticker_up, "EREDIVISIE") -> :soccer
+      String.contains?(ticker_up, "LIGAPORTUGAL") -> :soccer
+      String.contains?(ticker_up, "BELGIANPL") -> :soccer
+      String.contains?(ticker_up, "SUPERLIG") -> :soccer
+      String.contains?(ticker_up, "SCOTTISHPREM") -> :soccer
+      String.contains?(ticker_up, "SWISSLEAGUE") -> :soccer
+      String.contains?(ticker_up, "DANISHSUPERLIGA") -> :soccer
+      String.contains?(ticker_up, "EKSTRAKLASA") -> :soccer
+      String.contains?(ticker_up, "HNL") -> :soccer
+      # Soccer - Americas
+      String.contains?(ticker_up, "MLS") -> :soccer
+      String.contains?(ticker_up, "LIGAMX") -> :soccer
+      String.contains?(ticker_up, "BRASILEIRO") -> :soccer
+      String.contains?(ticker_up, "ARGPREMDIV") -> :soccer
+      # Soccer - Asia & Middle East
+      String.contains?(ticker_up, "SAUDIPL") -> :soccer
+      String.contains?(ticker_up, "SAUDI") -> :soccer
+      String.contains?(ticker_up, "JLEAGUE") -> :soccer
+      String.contains?(ticker_up, "KLEAGUE") -> :soccer
+      # Soccer - Other & Competitions
       String.contains?(ticker_up, "ALEAGUE") -> :soccer
       String.contains?(ticker_up, "AFCON") -> :soccer
+      String.contains?(ticker_up, "UCL") -> :soccer
+      String.contains?(ticker_up, "UEL") -> :soccer
+      String.contains?(ticker_up, "UECL") -> :soccer
+      String.contains?(ticker_up, "COPADELREY") -> :soccer
+      String.contains?(ticker_up, "DFBPOKAL") -> :soccer
+      String.contains?(ticker_up, "COPPAITALIA") -> :soccer
+      String.contains?(ticker_up, "ITASUPERCUP") -> :soccer
+      String.contains?(ticker_up, "TACAPORT") -> :soccer
+      String.contains?(ticker_up, "CLUBWC") -> :soccer
+      String.contains?(ticker_up, "INTERCONCUP") -> :soccer
+      String.contains?(ticker_up, "FIFA") -> :soccer
+      String.contains?(ticker_up, "UEFA") -> :soccer
       # Hockey
       String.contains?(ticker_up, "NHL") -> :nhl
       # Baseball
