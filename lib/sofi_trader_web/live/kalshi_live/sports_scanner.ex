@@ -199,12 +199,23 @@ defmodule SofiTraderWeb.KalshiLive.SportsScanner do
               Scan sports markets and analyze with AI to find underpriced bets
             </p>
           </div>
-          <.link
-            navigate={~p"/kalshi"}
-            class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-          >
-            ← Back to Strategies
-          </.link>
+          <div class="flex items-center gap-3">
+            <.link
+              navigate={~p"/betting"}
+              class="inline-flex items-center px-4 py-2 border border-indigo-300 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+            >
+              <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Betting Stats
+            </.link>
+            <.link
+              navigate={~p"/kalshi"}
+              class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              ← Back to Strategies
+            </.link>
+          </div>
         </div>
 
         <!-- Portfolio Summary -->

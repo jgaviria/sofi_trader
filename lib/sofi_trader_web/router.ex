@@ -33,6 +33,10 @@ defmodule SofiTraderWeb.Router do
     live "/kalshi/:id/orders", KalshiLive.Orders, :index
     live "/kalshi/markets", KalshiLive.Markets, :index
     live "/kalshi/sports-scanner", KalshiLive.SportsScanner, :index
+
+    # Betting Statistics
+    live "/betting", BettingLive.Statistics, :index
+    live "/betting/stats", BettingLive.Statistics, :index
   end
 
   # Other scopes may use custom stacks.
